@@ -6,28 +6,6 @@ export default function BudgetSimulator() {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
-  // ★★★ ここに以下を追加 ★★★
-  // ユーザー情報
-  const [userInfo, setUserInfo] = useState(() =>
-    loadFromStorage('userInfo', null)
-  );
-  
-  const [showSettings, setShowSettings] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(!userInfo);
-  // ★★★ ここまで ★★★
-  
-   // ローカルストレージから読み込み
-  const loadFromStorage = (key, defaultValue) => {
-    try {
-      const item = localStorage.getItem(key);
-      return item ? JSON.parse(item) : defaultValue;
-    } catch (error) {
-      return defaultValue;
-    }
-  };
-
-  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
-  
   // ローカルストレージから読み込み
   const loadFromStorage = (key, defaultValue) => {
     try {
@@ -46,16 +24,12 @@ export default function BudgetSimulator() {
       console.error('保存エラー:', error);
     }
   };
-  // ローカルストレージに保存
-  const saveToStorage = (key, value) => {
-    try {
-      localStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-      console.error('保存エラー:', error);
-    }
-  };
 
-  // ★★★ ここに以下を追加 ★★★
+  // ユーザー情報
+  const [userInfo, setUserInfo] = useState(() => loadFromStorage('userInfo', null));
+  const [showSettings, setShowSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(!loadFromStorage('userInfo', null));
+
   // データ全削除
   const resetAllData = () => {
     if (window.confirm('本当に全てのデータを削除しますか？この操作は取り消せません。')) {
@@ -63,18 +37,6 @@ export default function BudgetSimulator() {
       window.location.reload();
     }
   };
-
-  // ユーザー情報を保存
-  useEffect(() => {
-    if (userInfo) {
-      saveToStorage('userInfo', userInfo);
-    }
-  }, [userInfo]);
-  // ★★★ ここまで ★★★
-
-  const [transactions, setTransactions] = useState(() => 
-    loadFromStorage('transactions', [
-      ...
 
   const [transactions, setTransactions] = useState(() => 
     loadFromStorage('transactions', [
@@ -137,7 +99,14 @@ export default function BudgetSimulator() {
     saveToStorage('lifeEvents', lifeEvents);
   }, [lifeEvents]);
 
+  useEffect(() => {
+    if (userInfo) {
+      saveToStorage('userInfo', userInfo);
+    }
+  }, [userInfo]);
+
   const categories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他'];
+
   // 月次収支計算（確定した取引のみ）
   const calculateMonthlyBalance = (yearMonth) => {
     const monthTransactions = transactions.filter(t => 
@@ -301,31 +270,47 @@ export default function BudgetSimulator() {
     };
   };
 
-  // カレンダー用：指定月の日数を取得
+  // カレンダー用関数
   const getDaysInMonth = (yearMonth) => {
     const [year, month] = yearMonth.split('-').map(Number);
     return new Date(year, month, 0).getDate();
   };
 
-  // カレンダー用：月初の曜日を取得
   const getFirstDayOfMonth = (yearMonth) => {
     const [year, month] = yearMonth.split('-').map(Number);
     return new Date(year, month - 1, 1).getDay();
   };
 
-  // カレンダー用：指定日の取引を取得
   const getTransactionsForDay = (yearMonth, day) => {
     const dateStr = `${yearMonth}-${String(day).padStart(2, '0')}`;
     return transactions.filter(t => t.date === dateStr);
   };
 
-  // カレンダー用：指定日の収支を計算
   const getDayBalance = (yearMonth, day) => {
     const dayTransactions = getTransactionsForDay(yearMonth, day);
     const income = dayTransactions.filter(t => t.amount > 0 && t.settled).reduce((sum, t) => sum + t.amount, 0);
     const expense = Math.abs(dayTransactions.filter(t => t.amount < 0 && t.settled).reduce((sum, t) => sum + t.amount, 0));
     return { income, expense, balance: income - expense };
   };
+
+  const getLast6MonthsTrend = () => {
+    const trends = [];
+    const today = new Date();
+    
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const yearMonth = date.toISOString().slice(0, 7);
+      const balance = calculateMonthlyBalance(yearMonth);
+      
+      trends.push({
+        month: date.toLocaleDateString('ja-JP', { month: 'short' }),
+        balance: balance.balance
+      });
+    }
+    
+    return trends;
+  };
+
   // シミュレーション計算
   const calculateSimulation = () => {
     const { targetAmount, years, monthlyInvestment, returnRate } = simulationSettings;
@@ -339,7 +324,6 @@ export default function BudgetSimulator() {
       for (let month = 1; month <= 12; month++) {
         currentValue = currentValue * (1 + monthlyRate) + monthlyInvestment;
         
-        // ライフイベントの適用
         const currentDate = new Date();
         currentDate.setFullYear(currentDate.getFullYear() + year - 1);
         currentDate.setMonth(currentDate.getMonth() + month - 1);
@@ -369,7 +353,7 @@ export default function BudgetSimulator() {
   const finalValue = simulationResults[simulationResults.length - 1]?.value || 0;
   const achievement = Math.min((finalValue / simulationSettings.targetAmount) * 100, 100);
 
-  // ライフイベント関連
+  // ライフイベント
   const lifeEventTemplates = [
     { name: '結婚', estimatedAmount: 3000000, icon: '💍', type: 'expense' },
     { name: '出産', estimatedAmount: 500000, icon: '👶', type: 'expense' },
@@ -384,7 +368,7 @@ export default function BudgetSimulator() {
   const eventIcons = ['💍', '👶', '🏠', '🚗', '🎓', '✈️', '💰', '🎉', '📌', '🎊', '🎁', '⭐'];
 
   const addOrUpdateLifeEvent = (eventData) => {
-    if (editingLifeEvent) {
+    if (editingLifeEvent && editingLifeEvent.id) {
       setLifeEvents(lifeEvents.map(e => e.id === editingLifeEvent.id ? { ...eventData, id: e.id } : e));
     } else {
       setLifeEvents([...lifeEvents, { ...eventData, id: Date.now() }]);
@@ -397,30 +381,11 @@ export default function BudgetSimulator() {
     setLifeEvents(lifeEvents.filter(e => e.id !== id));
   };
 
-  // 過去6ヶ月のトレンドデータ
-  const getLast6MonthsTrend = () => {
-    const trends = [];
-    const today = new Date();
-    
-    for (let i = 5; i >= 0; i--) {
-      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const yearMonth = date.toISOString().slice(0, 7);
-      const balance = calculateMonthlyBalance(yearMonth);
-      
-      trends.push({
-        month: date.toLocaleDateString('ja-JP', { month: 'short' }),
-        balance: balance.balance
-      });
-    }
-    
-    return trends;
-  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
-            {/* ヘッダー */}
+      {/* ヘッダー */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg">
         <div className="max-w-md mx-auto px-6 py-6">
-          {/* ★★★ この部分を置き換え ★★★ */}
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-white mb-1">
@@ -438,10 +403,8 @@ export default function BudgetSimulator() {
               ⚙️
             </button>
           </div>
-          {/* ★★★ ここまで ★★★ */}
         </div>
       </div>
-
 
       <div className="max-w-md mx-auto p-4">
         {/* ホームタブ */}
@@ -466,7 +429,7 @@ export default function BudgetSimulator() {
             </div>
 
             {/* 資産カード */}
-            <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl shadow-lg p-6 backdrop-blur">
+            <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl shadow-lg p-6">
               <p className="text-sm text-indigo-100 mb-2">総資産</p>
               <p className="text-4xl font-bold text-white mb-4">
                 ¥{(assetData.savings + assetData.investments).toLocaleString()}
@@ -493,18 +456,10 @@ export default function BudgetSimulator() {
                   </div>
                   <button
                     onClick={settleCredit}
-                    className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-600 transition-colors"
+                    className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-600"
                   >
                     確定する
                   </button>
-                </div>
-                <div className="space-y-1">
-                  {unsettledCredit.slice(0, 3).map(t => (
-                    <div key={t.id} className="flex justify-between text-xs text-orange-700">
-                      <span>{t.category}</span>
-                      <span>¥{Math.abs(t.amount).toLocaleString()}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             )}
@@ -588,14 +543,14 @@ export default function BudgetSimulator() {
 
                 <button
                   onClick={addTransaction}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-xl hover:opacity-90 transition-opacity"
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-xl hover:opacity-90"
                 >
                   追加する
                 </button>
               </div>
             </div>
 
-            {/* カテゴリ別支出（円グラフ） */}
+            {/* カテゴリ別支出 */}
             {calculateCategoryExpenses().length > 0 && (
               <div className="bg-white rounded-2xl shadow-md p-6">
                 <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -603,7 +558,6 @@ export default function BudgetSimulator() {
                   今月の支出内訳
                 </h2>
                 
-                {/* 円グラフ */}
                 <div className="flex justify-center mb-6">
                   <svg width="200" height="200" viewBox="0 0 200 200" className="transform -rotate-90">
                     {(() => {
@@ -645,7 +599,6 @@ export default function BudgetSimulator() {
                   </svg>
                 </div>
 
-                {/* 凡例 */}
                 <div className="space-y-2">
                   {calculateCategoryExpenses().map((item, index) => {
                     const total = calculateCategoryExpenses().reduce((sum, i) => sum + i.amount, 0);
@@ -715,7 +668,6 @@ export default function BudgetSimulator() {
                   <div
                     key={t.id}
                     onClick={() => setEditingTransaction(t)}
-                    onMouseEnter={() => {}}
                     className="flex items-center justify-between p-3 hover:bg-indigo-50 rounded-xl cursor-pointer transition-colors group relative"
                   >
                     <div className="flex items-center gap-3 flex-1">
@@ -748,7 +700,7 @@ export default function BudgetSimulator() {
                       ) : (
                         <button
                           onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(t.id); }}
-                          className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
+                          className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700"
                         >
                           🗑️
                         </button>
@@ -775,7 +727,6 @@ export default function BudgetSimulator() {
         {/* カレンダータブ */}
         {activeTab === 'calendar' && (
           <div className="space-y-4">
-            {/* 月選択 */}
             <div className="bg-white rounded-2xl shadow-md p-4">
               <div className="flex items-center justify-between mb-4">
                 <button
@@ -784,7 +735,7 @@ export default function BudgetSimulator() {
                     date.setMonth(date.getMonth() - 1);
                     setSelectedMonth(date.toISOString().slice(0, 7));
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg"
                 >
                   ◀
                 </button>
@@ -801,15 +752,13 @@ export default function BudgetSimulator() {
                       setSelectedMonth(nextMonth);
                     }
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="p-2 hover:bg-gray-100 rounded-lg"
                 >
                   ▶
                 </button>
               </div>
 
-              {/* カレンダーグリッド */}
               <div className="mb-4">
-                {/* 曜日ヘッダー */}
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {['日', '月', '火', '水', '木', '金', '土'].map((day, i) => (
                     <div key={day} className={`text-center text-xs font-bold py-2 ${i === 0 ? 'text-red-600' : i === 6 ? 'text-blue-600' : 'text-gray-600'}`}>
@@ -818,14 +767,11 @@ export default function BudgetSimulator() {
                   ))}
                 </div>
 
-                {/* カレンダー日付 */}
                 <div className="grid grid-cols-7 gap-1">
-                  {/* 空白セル */}
                   {[...Array(getFirstDayOfMonth(selectedMonth))].map((_, i) => (
                     <div key={`empty-${i}`} className="aspect-square"></div>
                   ))}
                   
-                  {/* 日付セル */}
                   {[...Array(getDaysInMonth(selectedMonth))].map((_, i) => {
                     const day = i + 1;
                     const dayTransactions = getTransactionsForDay(selectedMonth, day);
@@ -859,7 +805,6 @@ export default function BudgetSimulator() {
                 </div>
               </div>
 
-              {/* 月次サマリー */}
               <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
@@ -900,60 +845,6 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
-            {/* 取引履歴 */}
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4">取引履歴</h2>
-              <div className="space-y-2">
-                {transactions
-                  .filter(t => t.date.startsWith(selectedMonth))
-                  .map(t => (
-                    <div
-                      key={t.id}
-                      onClick={() => setEditingTransaction(t)}
-                      className="flex items-center justify-between p-3 hover:bg-indigo-50 rounded-xl cursor-pointer transition-colors group relative"
-                    >
-                      <div className="flex items-center gap-3 flex-1">
-                        <span className="text-xl">{t.paymentMethod === 'credit' ? '💳' : '💵'}</span>
-                        <div className="flex-1">
-                          <p className="font-medium text-gray-800">{t.category}</p>
-                          <p className="text-xs text-gray-500">{t.date}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {!t.settled && <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">未確定</span>}
-                        <p className={`font-bold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
-                        </p>
-                        {deleteConfirmId === t.id ? (
-                          <div className="flex gap-1">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); deleteTransaction(t.id); }}
-                              className="bg-red-500 text-white px-3 py-1 rounded text-xs"
-                            >
-                              削除
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}
-                              className="bg-gray-300 text-gray-700 px-3 py-1 rounded text-xs"
-                            >
-                              戻る
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(t.id); }}
-                            className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 transition-opacity"
-                          >
-                            🗑️
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-
-            {/* 月次トレンド */}
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-bold text-gray-800 mb-4">過去6ヶ月の推移</h2>
               <div className="space-y-3">
@@ -986,7 +877,6 @@ export default function BudgetSimulator() {
         {/* シミュレーションタブ */}
         {activeTab === 'simulation' && (
           <div className="space-y-4">
-            {/* 現在の資産 */}
             <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6">
               <p className="text-sm text-purple-100 mb-2">現在の資産</p>
               <p className="text-4xl font-bold text-white mb-4">
@@ -1004,7 +894,6 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
-            {/* 設定 */}
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <Target size={20} className="text-indigo-600" />
@@ -1069,12 +958,10 @@ export default function BudgetSimulator() {
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, returnRate: Number(e.target.value) })}
                     className="w-full"
                   />
-                  <p className="text-xs text-gray-500 mt-1">※全世界株式インデックスの過去平均: 約5-7%</p>
                 </div>
               </div>
             </div>
 
-            {/* ライフイベント */}
             <div className="bg-white rounded-2xl shadow-md p-6">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-bold text-gray-800">ライフイベント</h2>
@@ -1109,13 +996,13 @@ export default function BudgetSimulator() {
                             setEditingLifeEvent(event);
                             setShowLifeEventModal(true);
                           }}
-                          className="text-indigo-600 hover:text-indigo-800"
+                          className="text-indigo-600"
                         >
                           ✏️
                         </button>
                         <button
                           onClick={() => deleteLifeEvent(event.id)}
-                          className="text-red-500 hover:text-red-700"
+                          className="text-red-500"
                         >
                           🗑️
                         </button>
@@ -1126,7 +1013,6 @@ export default function BudgetSimulator() {
               )}
             </div>
 
-            {/* シミュレーション結果 */}
             <div className="bg-white rounded-2xl shadow-md p-6">
               <h2 className="text-lg font-bold text-gray-800 mb-4">
                 {simulationSettings.years}年後の予測
@@ -1139,7 +1025,7 @@ export default function BudgetSimulator() {
                 </p>
                 <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
                   <div
-                    className="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full transition-all"
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full"
                     style={{ width: `${achievement}%` }}
                   />
                 </div>
@@ -1152,20 +1038,18 @@ export default function BudgetSimulator() {
                 <div className="bg-green-50 border-2 border-green-500 rounded-xl p-4 text-center">
                   <p className="text-2xl mb-2">🎉</p>
                   <p className="font-bold text-green-800">目標達成可能！</p>
-                  <p className="text-sm text-green-600 mt-1">このペースなら目標に到達できます</p>
                 </div>
               ) : (
                 <div className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4">
                   <p className="font-bold text-orange-800 mb-2">💡 アドバイス</p>
                   <p className="text-sm text-orange-700">
-                    目標達成には、月々の投資額を
+                    目標達成には、月々の投資額を約
                     <span className="font-bold"> ¥{Math.ceil((simulationSettings.targetAmount - finalValue) / (simulationSettings.years * 12) / 1000) * 1000}</span>
-                    円増やすか、運用期間を延ばすことをおすすめします。
+                    円増やすことをおすすめします。
                   </p>
                 </div>
               )}
 
-              {/* 年ごとの推移 */}
               <div className="mt-6 space-y-3">
                 <h3 className="font-bold text-gray-800">年ごとの推移</h3>
                 {simulationResults.map(result => (
@@ -1198,6 +1082,212 @@ export default function BudgetSimulator() {
           </div>
         )}
       </div>
+      {/* オンボーディング（初回設定）モーダル */}
+      {showOnboarding && (
+        <div className="fixed inset-0 bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full">
+            <div className="text-center mb-6">
+              <div className="text-6xl mb-4">💰</div>
+              <h1 className="text-3xl font-bold text-gray-800 mb-2">
+                マネープランナーへ<br/>ようこそ！
+              </h1>
+              <p className="text-gray-600">
+                まずは基本情報を入力しましょう
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  お名前（ニックネーム）
+                </label>
+                <input
+                  type="text"
+                  placeholder="例：太郎"
+                  value={userInfo?.name || ''}
+                  onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  年齢
+                </label>
+                <input
+                  type="number"
+                  placeholder="25"
+                  value={userInfo?.age || ''}
+                  onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  現在の貯金額
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="500000"
+                  value={assetData.savings}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '');
+                    setAssetData({ ...assetData, savings: Number(value) });
+                  }}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  現在：¥{assetData.savings.toLocaleString()}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  現在の投資額
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="300000"
+                  value={assetData.investments}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '');
+                    setAssetData({ ...assetData, investments: Number(value) });
+                  }}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  現在：¥{assetData.investments.toLocaleString()}
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                if (!userInfo?.name || !userInfo?.age) {
+                  alert('お名前と年齢を入力してください');
+                  return;
+                }
+                setShowOnboarding(false);
+              }}
+              className="w-full mt-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-xl hover:opacity-90"
+            >
+              始める
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 設定モーダル */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
+            <h2 className="text-xl font-bold text-gray-800 mb-6">設定</h2>
+
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">ユーザー情報</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    お名前
+                  </label>
+                  <input
+                    type="text"
+                    value={userInfo?.name || ''}
+                    onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    年齢
+                  </label>
+                  <input
+                    type="number"
+                    value={userInfo?.age || ''}
+                    onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    貯金額
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={assetData.savings}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setAssetData({ ...assetData, savings: Number(value) });
+                    }}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    ¥{assetData.savings.toLocaleString()}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    投資額
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={assetData.investments}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/[^0-9]/g, '');
+                      setAssetData({ ...assetData, investments: Number(value) });
+                    }}
+                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    ¥{assetData.investments.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mb-6">
+              <h3 className="text-lg font-bold text-gray-800 mb-4">データ管理</h3>
+              <div className="space-y-3">
+                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+                  <p className="text-sm text-blue-800 mb-2">
+                    💾 データは自動的にこのブラウザに保存されています
+                  </p>
+                  <p className="text-xs text-blue-600">
+                    取引数: {transactions.length}件<br/>
+                    月次履歴: {Object.keys(monthlyHistory).length}ヶ月<br/>
+                    ライフイベント: {lifeEvents.length}件
+                  </p>
+                </div>
+
+                <button
+                  onClick={resetAllData}
+                  className="w-full bg-red-500 text-white font-bold py-3 rounded-xl hover:bg-red-600"
+                >
+                  🗑️ 全てのデータを削除
+                </button>
+                <p className="text-xs text-gray-500 text-center">
+                  ※この操作は取り消せません
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowSettings(false)}
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3 rounded-xl"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 月締めモーダル */}
       {showCloseMonthModal && (
@@ -1369,15 +1459,15 @@ export default function BudgetSimulator() {
         </div>
       )}
 
-      {/* ライフイベント追加/編集モーダル */}
+      {/* ライフイベントモーダル */}
       {showLifeEventModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
             <h2 className="text-xl font-bold text-gray-800 mb-4">
-              {editingLifeEvent ? 'イベントを編集' : 'ライフイベントを追加'}
+              {editingLifeEvent?.id ? 'イベントを編集' : 'ライフイベントを追加'}
             </h2>
 
-            {!editingLifeEvent && (
+            {!editingLifeEvent?.id && !editingLifeEvent?.name && (
               <div className="mb-6">
                 <p className="text-sm font-medium text-gray-700 mb-3">テンプレートを選択</p>
                 <div className="grid grid-cols-2 gap-2">
@@ -1385,16 +1475,15 @@ export default function BudgetSimulator() {
                     <button
                       key={template.name}
                       onClick={() => {
-                        const newEvent = {
+                        setEditingLifeEvent({
                           name: template.name,
                           amount: template.estimatedAmount,
                           icon: template.icon,
                           date: new Date().toISOString().slice(0, 7),
                           type: template.type
-                        };
-                        setEditingLifeEvent(newEvent);
+                        });
                       }}
-                      className="p-3 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-colors"
+                      className="p-3 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50"
                     >
                       <div className="text-2xl mb-1">{template.icon}</div>
                       <div className="text-sm font-medium text-gray-800">{template.name}</div>
@@ -1404,7 +1493,7 @@ export default function BudgetSimulator() {
               </div>
             )}
 
-            {editingLifeEvent && (
+            {editingLifeEvent?.name && (
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">イベント名</label>
@@ -1479,30 +1568,6 @@ export default function BudgetSimulator() {
           </div>
         </div>
       )}
-      </div>
-
-      {/* ライフイベント追加/編集モーダル */}
-      {showLifeEventModal && (
-        ...ライフイベントモーダルのコード...
-      )}
-
-      {/* ★★★ ここに以下を追加（オンボーディングと設定モーダル） ★★★ */}
-      {/* オンボーディング（初回設定）モーダル */}
-      {showOnboarding && (
-        <div className="fixed inset-0 bg-gradient-to-br from-indigo-600 to-purple-600...
-        ...全部のコード...
-      )}
-
-      {/* 設定モーダル */}
-      {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50...
-        ...全部のコード...
-      )}
-      {/* ★★★ ここまで ★★★ */}
-
-      {/* ボトムナビゲーション */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
-        ...
 
       {/* ボトムナビゲーション */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
