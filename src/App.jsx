@@ -16,9 +16,15 @@ export default function BudgetSimulator() {
   const [showOnboarding, setShowOnboarding] = useState(!userInfo);
   // ★★★ ここまで ★★★
   
-  // ローカルストレージから読み込み
+   // ローカルストレージから読み込み
   const loadFromStorage = (key, defaultValue) => {
-    ...
+    try {
+      const item = localStorage.getItem(key);
+      return item ? JSON.parse(item) : defaultValue;
+    } catch (error) {
+      return defaultValue;
+    }
+  };
 
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
