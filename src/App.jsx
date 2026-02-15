@@ -4,6 +4,24 @@ import { PlusCircle, TrendingUp, Calendar, DollarSign, PieChart, Target } from '
 
 export default function BudgetSimulator() {
   const [activeTab, setActiveTab] = useState('home');
+  export default function BudgetSimulator() {
+  const [activeTab, setActiveTab] = useState('home');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  
+  // ★★★ ここに以下を追加 ★★★
+  // ユーザー情報
+  const [userInfo, setUserInfo] = useState(() =>
+    loadFromStorage('userInfo', null)
+  );
+  
+  const [showSettings, setShowSettings] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(!userInfo);
+  // ★★★ ここまで ★★★
+  
+  // ローカルストレージから読み込み
+  const loadFromStorage = (key, defaultValue) => {
+    ...
+
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
   // ローカルストレージから読み込み
@@ -24,6 +42,35 @@ export default function BudgetSimulator() {
       console.error('保存エラー:', error);
     }
   };
+  // ローカルストレージに保存
+  const saveToStorage = (key, value) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch (error) {
+      console.error('保存エラー:', error);
+    }
+  };
+
+  // ★★★ ここに以下を追加 ★★★
+  // データ全削除
+  const resetAllData = () => {
+    if (window.confirm('本当に全てのデータを削除しますか？この操作は取り消せません。')) {
+      localStorage.clear();
+      window.location.reload();
+    }
+  };
+
+  // ユーザー情報を保存
+  useEffect(() => {
+    if (userInfo) {
+      saveToStorage('userInfo', userInfo);
+    }
+  }, [userInfo]);
+  // ★★★ ここまで ★★★
+
+  const [transactions, setTransactions] = useState(() => 
+    loadFromStorage('transactions', [
+      ...
 
   const [transactions, setTransactions] = useState(() => 
     loadFromStorage('transactions', [
@@ -1412,6 +1459,30 @@ export default function BudgetSimulator() {
           </div>
         </div>
       )}
+      </div>
+
+      {/* ライフイベント追加/編集モーダル */}
+      {showLifeEventModal && (
+        ...ライフイベントモーダルのコード...
+      )}
+
+      {/* ★★★ ここに以下を追加（オンボーディングと設定モーダル） ★★★ */}
+      {/* オンボーディング（初回設定）モーダル */}
+      {showOnboarding && (
+        <div className="fixed inset-0 bg-gradient-to-br from-indigo-600 to-purple-600...
+        ...全部のコード...
+      )}
+
+      {/* 設定モーダル */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50...
+        ...全部のコード...
+      )}
+      {/* ★★★ ここまで ★★★ */}
+
+      {/* ボトムナビゲーション */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
+        ...
 
       {/* ボトムナビゲーション */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
