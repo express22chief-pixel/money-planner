@@ -1,20 +1,21 @@
 import './index.css'
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, TrendingUp, Calendar, DollarSign, PieChart, Target } from 'lucide-react';
+import { PlusCircle, TrendingUp, Calendar, DollarSign, PieChart, Target, Sun, Moon } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 export default function BudgetSimulator() {
   const [activeTab, setActiveTab] = useState('home');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [darkMode, setDarkMode] = useState(() => loadFromStorage('darkMode', true));
   
-  const loadFromStorage = (key, defaultValue) => {
+  function loadFromStorage(key, defaultValue) {
     try {
       const item = localStorage.getItem(key);
       return item ? JSON.parse(item) : defaultValue;
     } catch (error) {
       return defaultValue;
     }
-  };
+  }
 
   const saveToStorage = (key, value) => {
     try {
@@ -71,6 +72,8 @@ export default function BudgetSimulator() {
       targetAmount: 10000000,
       years: 10,
       monthlyInvestment: 30000,
+      monthlySavings: 20000,
+      savingsInterestRate: 0.2,
       returnRate: 5,
       useNisa: true,
       useLumpSum: false,
@@ -112,6 +115,10 @@ export default function BudgetSimulator() {
   useEffect(() => {
     saveToStorage('simulationSettings', simulationSettings);
   }, [simulationSettings]);
+
+  useEffect(() => {
+    saveToStorage('darkMode', darkMode);
+  }, [darkMode]);
 
   const categories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他'];
 
@@ -308,20 +315,20 @@ export default function BudgetSimulator() {
     
     return trends;
   };
-  // 新NISA制度対応のシミュレーション計算
+  // 新NISA制度 + 貯金シミュレーション対応
   const calculateSimulation = () => {
-    const { targetAmount, years, monthlyInvestment, returnRate, useNisa, useLumpSum, lumpSumAmount, lumpSumFrequency, lumpSumMonths } = simulationSettings;
+    const { targetAmount, years, monthlyInvestment, monthlySavings, savingsInterestRate, returnRate, useNisa, useLumpSum, lumpSumAmount, lumpSumMonths } = simulationSettings;
     const monthlyRate = returnRate / 100 / 12;
+    const savingsMonthlyRate = savingsInterestRate / 100 / 12;
 
     let results = [];
-    let regularInvestment = assetData.investments; // 通常の投資（課税）
-    let nisaInvestment = assetData.nisa || 0; // NISA投資（非課税）
+    let regularInvestment = assetData.investments;
+    let nisaInvestment = assetData.nisa || 0;
     let savings = assetData.savings;
     
-    // NISA年間限度額
-    const NISA_TSUMITATE_LIMIT = 3600000; // つみたて投資枠：年360万円
-    const NISA_GROWTH_LIMIT = 2400000; // 成長投資枠：年240万円
-    const NISA_TOTAL_LIMIT = 18000000; // 生涯投資枠：1800万円
+    const NISA_TSUMITATE_LIMIT = 3600000;
+    const NISA_GROWTH_LIMIT = 2400000;
+    const NISA_TOTAL_LIMIT = 18000000;
 
     let nisaUsedThisYear = 0;
     let nisaTotalUsed = nisaInvestment;
@@ -332,6 +339,15 @@ export default function BudgetSimulator() {
       let yearlyProfit = 0;
 
       for (let month = 1; month <= 12; month++) {
+        // 月次貯金増加
+        if (monthlySavings > 0) {
+          savings += monthlySavings;
+        }
+
+        // 貯金の利息
+        const savingsInterest = savings * savingsMonthlyRate;
+        savings += savingsInterest;
+
         // 月次積立投資
         if (monthlyInvestment > 0) {
           if (useNisa && nisaTotalUsed < NISA_TOTAL_LIMIT && nisaUsedThisYear < NISA_TSUMITATE_LIMIT) {
@@ -384,7 +400,6 @@ export default function BudgetSimulator() {
 
         yearlyProfit += nisaMonthlyProfit + regularMonthlyProfit;
 
-        // 通常投資の税金計算（利益の20.315%）
         const regularTax = regularMonthlyProfit * 0.20315;
         yearlyTaxSaved += regularTax;
 
@@ -438,9 +453,8 @@ export default function BudgetSimulator() {
   const achievement = Math.min((finalValue / simulationSettings.targetAmount) * 100, 100);
   const totalTaxSaved = simulationResults[simulationResults.length - 1]?.taxSaved || 0;
 
-  // グラフ用データ整形
   const chartData = simulationResults.map(result => ({
-    年: `${result.year}年後`,
+    年: `${result.year}年`,
     貯金: result.savings,
     課税口座: result.regularInvestment,
     NISA: result.nisaInvestment,
@@ -474,118 +488,145 @@ export default function BudgetSimulator() {
     setLifeEvents(lifeEvents.filter(e => e.id !== id));
   };
 
+  // テーマカラー
+  const theme = {
+    bg: darkMode ? 'bg-black' : 'bg-gray-50',
+    card: darkMode ? 'bg-gray-900' : 'bg-white',
+    text: darkMode ? 'text-white' : 'text-gray-900',
+    textSecondary: darkMode ? 'text-gray-400' : 'text-gray-600',
+    border: darkMode ? 'border-gray-800' : 'border-gray-200',
+    green: darkMode ? '#0CD664' : '#10b981',
+    red: darkMode ? '#FF453A' : '#ef4444',
+    chart: darkMode ? '#1C1C1E' : '#ffffff'
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
+    <div className={`min-h-screen ${theme.bg} pb-20 transition-colors duration-200`}>
       {/* ヘッダー */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg">
-        <div className="max-w-md mx-auto px-6 py-6">
+      <div className={`${darkMode ? 'bg-gray-900' : 'bg-white'} border-b ${theme.border}`}>
+        <div className="max-w-md mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white mb-1">
+              <h1 className={`text-xl font-bold ${theme.text}`}>
                 マネープランナー
-                {userInfo?.name && <span className="text-lg ml-2">- {userInfo.name}さん</span>}
+                {userInfo?.name && <span className={`text-sm ml-2 ${theme.textSecondary}`}>{userInfo.name}</span>}
               </h1>
-              <p className="text-sm text-indigo-100">
-                {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+              <p className={`text-xs ${theme.textSecondary}`}>
+                {new Date().toLocaleDateString('ja-JP', { month: 'short', day: 'numeric' })}
               </p>
             </div>
-            <button
-              onClick={() => setShowSettings(true)}
-              className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-colors"
-            >
-              ⚙️
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}
+              >
+                {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} className="text-gray-600" />}
+              </button>
+              <button
+                onClick={() => setShowSettings(true)}
+                className={`p-2 rounded-lg ${darkMode ? 'bg-gray-800' : 'bg-gray-100'}`}
+              >
+                <span className={theme.text}>⚙️</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="max-w-md mx-auto p-4">
+      <div className="max-w-md mx-auto p-3">
         {/* ホームタブ */}
         {activeTab === 'home' && (
-          <div className="space-y-4">
-            {/* 月次サマリー */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-gradient-to-br from-green-400 to-green-600 rounded-2xl shadow-md p-4">
-                <p className="text-xs text-green-100 mb-1">収入</p>
-                <p className="text-xl font-bold text-white">¥{currentBalance.income.toLocaleString()}</p>
-              </div>
-              <div className="bg-gradient-to-br from-red-400 to-red-600 rounded-2xl shadow-md p-4">
-                <p className="text-xs text-red-100 mb-1">支出</p>
-                <p className="text-xl font-bold text-white">¥{currentBalance.expense.toLocaleString()}</p>
-              </div>
-              <div className="bg-gradient-to-br from-blue-400 to-blue-600 rounded-2xl shadow-md p-4">
-                <p className="text-xs text-blue-100 mb-1">収支</p>
-                <p className="text-xl font-bold text-white">
-                  {currentBalance.balance >= 0 ? '+' : ''}¥{currentBalance.balance.toLocaleString()}
-                </p>
+          <div className="space-y-3">
+            {/* 総資産カード - 株価アプリ風 */}
+            <div className={`${theme.card} rounded-2xl p-4`}>
+              <p className={`text-xs ${theme.textSecondary} mb-1`}>総資産</p>
+              <p className={`text-4xl font-bold ${theme.text} mb-3`}>
+                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0)).toLocaleString()}
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <p className={`text-xs ${theme.textSecondary}`}>貯金</p>
+                  <p className={`text-lg font-semibold ${theme.text}`}>¥{(assetData.savings / 10000).toFixed(0)}万</p>
+                </div>
+                <div>
+                  <p className={`text-xs ${theme.textSecondary}`}>投資</p>
+                  <p className={`text-lg font-semibold ${theme.text}`}>¥{(assetData.investments / 10000).toFixed(0)}万</p>
+                </div>
+                <div>
+                  <p className={`text-xs ${theme.textSecondary}`}>NISA</p>
+                  <p className={`text-lg font-semibold`} style={{ color: theme.green }}>¥{((assetData.nisa || 0) / 10000).toFixed(0)}万</p>
+                </div>
               </div>
             </div>
 
-            {/* 資産カード */}
-            <div className="bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 rounded-2xl shadow-lg p-6">
-              <p className="text-sm text-indigo-100 mb-2">総資産</p>
-              <p className="text-4xl font-bold text-white mb-4">
-                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0)).toLocaleString()}
-              </p>
-              <div className="grid grid-cols-3 gap-2 text-sm">
-                <div>
-                  <p className="text-indigo-100">貯金</p>
-                  <p className="text-lg font-bold text-white">¥{assetData.savings.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-purple-100">投資</p>
-                  <p className="text-lg font-bold text-white">¥{assetData.investments.toLocaleString()}</p>
-                </div>
-                <div>
-                  <p className="text-pink-100">NISA</p>
-                  <p className="text-lg font-bold text-white">¥{(assetData.nisa || 0).toLocaleString()}</p>
-                </div>
+            {/* 月次サマリー */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className={`${theme.card} rounded-xl p-3`}>
+                <p className={`text-xs ${theme.textSecondary} mb-1`}>収入</p>
+                <p className="text-lg font-bold" style={{ color: theme.green }}>
+                  ¥{(currentBalance.income / 10000).toFixed(1)}万
+                </p>
+              </div>
+              <div className={`${theme.card} rounded-xl p-3`}>
+                <p className={`text-xs ${theme.textSecondary} mb-1`}>支出</p>
+                <p className="text-lg font-bold" style={{ color: theme.red }}>
+                  ¥{(currentBalance.expense / 10000).toFixed(1)}万
+                </p>
+              </div>
+              <div className={`${theme.card} rounded-xl p-3`}>
+                <p className={`text-xs ${theme.textSecondary} mb-1`}>収支</p>
+                <p className={`text-lg font-bold`} style={{ color: currentBalance.balance >= 0 ? theme.green : theme.red }}>
+                  {currentBalance.balance >= 0 ? '+' : ''}¥{(currentBalance.balance / 10000).toFixed(1)}万
+                </p>
               </div>
             </div>
 
             {/* クレジット未確定 */}
             {unsettledCredit.length > 0 && (
-              <div className="bg-orange-50 border-2 border-orange-300 rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-3">
+              <div className={`${theme.card} rounded-xl p-4 border-2`} style={{ borderColor: '#FF9F0A' }}>
+                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-orange-800 font-bold">💳 未確定のクレジット</p>
-                    <p className="text-2xl font-bold text-orange-600">¥{totalUnsettledCredit.toLocaleString()}</p>
+                    <p className={`text-sm font-bold ${theme.text}`}>💳 未確定のクレジット</p>
+                    <p className="text-2xl font-bold" style={{ color: '#FF9F0A' }}>
+                      ¥{totalUnsettledCredit.toLocaleString()}
+                    </p>
                   </div>
                   <button
                     onClick={settleCredit}
-                    className="bg-orange-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-orange-600"
+                    className="px-4 py-2 rounded-lg text-sm font-bold text-white"
+                    style={{ backgroundColor: '#FF9F0A' }}
                   >
-                    確定する
+                    確定
                   </button>
                 </div>
               </div>
             )}
 
             {/* 取引入力フォーム */}
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <PlusCircle size={20} className="text-indigo-600" />
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <h2 className={`text-base font-bold ${theme.text} mb-3 flex items-center gap-2`}>
+                <PlusCircle size={18} style={{ color: theme.green }} />
                 取引を追加
               </h2>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex gap-2">
                   <button
                     onClick={() => setNewTransaction({ ...newTransaction, type: 'expense' })}
-                    className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${
                       newTransaction.type === 'expense'
-                        ? 'bg-red-500 text-white scale-105 shadow-lg'
-                        : 'bg-gray-100 text-gray-600'
+                        ? darkMode ? 'bg-red-600 text-white' : 'bg-red-500 text-white'
+                        : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
                     支出
                   </button>
                   <button
                     onClick={() => setNewTransaction({ ...newTransaction, type: 'income' })}
-                    className={`flex-1 py-3 rounded-xl font-bold transition-all ${
+                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all ${
                       newTransaction.type === 'income'
-                        ? 'bg-green-500 text-white scale-105 shadow-lg'
-                        : 'bg-gray-100 text-gray-600'
+                        ? darkMode ? 'bg-green-600 text-white' : 'bg-green-500 text-white'
+                        : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
                     収入
@@ -595,20 +636,20 @@ export default function BudgetSimulator() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'credit' })}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium ${
                       newTransaction.paymentMethod === 'credit'
-                        ? 'bg-orange-500 text-white'
-                        : 'bg-gray-100 text-gray-600'
+                        ? darkMode ? 'bg-orange-600 text-white' : 'bg-orange-500 text-white'
+                        : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
                     💳 クレジット
                   </button>
                   <button
                     onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'cash' })}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium ${
                       newTransaction.paymentMethod === 'cash'
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-100 text-gray-600'
+                        ? darkMode ? 'bg-green-600 text-white' : 'bg-green-500 text-white'
+                        : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                     }`}
                   >
                     💵 現金
@@ -624,13 +665,21 @@ export default function BudgetSimulator() {
                     const value = e.target.value.replace(/[^0-9]/g, '');
                     setNewTransaction({ ...newTransaction, amount: value });
                   }}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-lg focus:border-indigo-500 focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-lg text-base ${
+                    darkMode 
+                      ? 'bg-gray-800 text-white border border-gray-700' 
+                      : 'bg-white border-2 border-gray-200'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
 
                 <select
                   value={newTransaction.category}
                   onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                  className={`w-full px-3 py-2 rounded-lg text-sm ${
+                    darkMode 
+                      ? 'bg-gray-800 text-white border border-gray-700' 
+                      : 'bg-white border-2 border-gray-200'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 >
                   <option value="">カテゴリを選択</option>
                   {categories.map(cat => (
@@ -640,7 +689,8 @@ export default function BudgetSimulator() {
 
                 <button
                   onClick={addTransaction}
-                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-xl hover:opacity-90"
+                  className="w-full py-3 rounded-lg font-bold text-white"
+                  style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
                 >
                   追加する
                 </button>
@@ -648,69 +698,32 @@ export default function BudgetSimulator() {
             </div>
             {/* カテゴリ別支出 */}
             {calculateCategoryExpenses().length > 0 && (
-              <div className="bg-white rounded-2xl shadow-md p-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                  <PieChart size={20} className="text-indigo-600" />
-                  今月の支出内訳
-                </h2>
+              <div className={`${theme.card} rounded-xl p-4`}>
+                <h2 className={`text-base font-bold ${theme.text} mb-3`}>今月の支出内訳</h2>
                 
-                <div className="flex justify-center mb-6">
-                  <svg width="200" height="200" viewBox="0 0 200 200" className="transform -rotate-90">
-                    {(() => {
-                      const categories = calculateCategoryExpenses();
-                      const total = categories.reduce((sum, c) => sum + c.amount, 0);
-                      const colors = ['#6366f1', '#a855f7', '#ec4899', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444'];
-                      let currentAngle = 0;
-                      
-                      return categories.map((cat, index) => {
-                        const percentage = cat.amount / total;
-                        const angle = percentage * 360;
-                        const startAngle = currentAngle;
-                        const endAngle = currentAngle + angle;
-                        
-                        const startRad = (startAngle * Math.PI) / 180;
-                        const endRad = (endAngle * Math.PI) / 180;
-                        
-                        const x1 = 100 + 80 * Math.cos(startRad);
-                        const y1 = 100 + 80 * Math.sin(startRad);
-                        const x2 = 100 + 80 * Math.cos(endRad);
-                        const y2 = 100 + 80 * Math.sin(endRad);
-                        
-                        const largeArc = angle > 180 ? 1 : 0;
-                        const path = `M 100 100 L ${x1} ${y1} A 80 80 0 ${largeArc} 1 ${x2} ${y2} Z`;
-                        
-                        currentAngle = endAngle;
-                        
-                        return (
-                          <path
-                            key={cat.category}
-                            d={path}
-                            fill={colors[index % colors.length]}
-                            opacity="0.9"
-                          />
-                        );
-                      });
-                    })()}
-                    <circle cx="100" cy="100" r="50" fill="white" />
-                  </svg>
-                </div>
-
                 <div className="space-y-2">
                   {calculateCategoryExpenses().map((item, index) => {
                     const total = calculateCategoryExpenses().reduce((sum, i) => sum + i.amount, 0);
                     const percentage = (item.amount / total * 100).toFixed(1);
-                    const colors = ['bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-blue-500', 'bg-cyan-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500'];
                     return (
-                      <div key={item.category} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 flex-1">
-                          <div className={`w-3 h-3 rounded-full ${colors[index % colors.length]}`}></div>
-                          <span className="text-sm text-gray-700 font-medium">{item.category}</span>
+                      <div key={item.category}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-sm ${theme.text}`}>{item.category}</span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-xs ${theme.textSecondary}`}>{percentage}%</span>
+                            <span className={`text-sm font-bold ${theme.text}`}>
+                              ¥{item.amount.toLocaleString()}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm text-gray-500">{percentage}%</span>
-                          <span className="text-sm text-gray-900 font-bold min-w-[80px] text-right">
-                            ¥{item.amount.toLocaleString()}
-                          </span>
+                        <div className="w-full bg-gray-700 rounded-full h-1.5">
+                          <div
+                            className="h-1.5 rounded-full"
+                            style={{ 
+                              width: `${percentage}%`,
+                              backgroundColor: darkMode ? '#0CD664' : '#10b981'
+                            }}
+                          />
                         </div>
                       </div>
                     );
@@ -721,30 +734,29 @@ export default function BudgetSimulator() {
 
             {/* 前月比較 */}
             {calculateMonthlyComparison().expense.previous > 0 && (
-              <div className="bg-white rounded-2xl shadow-md p-6">
-                <h2 className="text-lg font-bold text-gray-800 mb-4">前月との比較</h2>
-                <div className="space-y-3">
+              <div className={`${theme.card} rounded-xl p-4`}>
+                <h2 className={`text-base font-bold ${theme.text} mb-3`}>前月との比較</h2>
+                <div className="space-y-2">
                   {(() => {
                     const comparison = calculateMonthlyComparison();
                     return (
                       <>
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-600">支出</span>
+                          <span className={theme.textSecondary}>支出</span>
                           <div className="text-right">
-                            <p className="font-bold text-gray-800">¥{comparison.expense.current.toLocaleString()}</p>
-                            <p className={`text-sm ${comparison.expense.diff > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {comparison.expense.diff > 0 ? '+' : ''}¥{comparison.expense.diff.toLocaleString()} 
-                              ({comparison.expense.diffPercent.toFixed(1)}%)
+                            <p className={`font-bold ${theme.text}`}>¥{comparison.expense.current.toLocaleString()}</p>
+                            <p className={`text-xs`} style={{ color: comparison.expense.diff > 0 ? theme.red : theme.green }}>
+                              {comparison.expense.diff > 0 ? '+' : ''}¥{comparison.expense.diff.toLocaleString()}
                             </p>
                           </div>
                         </div>
                         <div className="flex justify-between items-center">
-                          <span className="text-gray-600">収支</span>
+                          <span className={theme.textSecondary}>収支</span>
                           <div className="text-right">
-                            <p className="font-bold text-gray-800">
+                            <p className={`font-bold ${theme.text}`}>
                               {comparison.balance.current >= 0 ? '+' : ''}¥{comparison.balance.current.toLocaleString()}
                             </p>
-                            <p className={`text-sm ${comparison.balance.diff >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            <p className={`text-xs`} style={{ color: comparison.balance.diff >= 0 ? theme.green : theme.red }}>
                               {comparison.balance.diff >= 0 ? '+' : ''}¥{comparison.balance.diff.toLocaleString()}
                             </p>
                           </div>
@@ -757,50 +769,33 @@ export default function BudgetSimulator() {
             )}
 
             {/* 最近の取引 */}
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4">最近の取引</h2>
-              <div className="space-y-2">
-                {transactions.slice(0, 10).map(t => (
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <h2 className={`text-base font-bold ${theme.text} mb-3`}>最近の取引</h2>
+              <div className="space-y-1">
+                {transactions.slice(0, 8).map(t => (
                   <div
                     key={t.id}
                     onClick={() => setEditingTransaction(t)}
-                    className="flex items-center justify-between p-3 hover:bg-indigo-50 rounded-xl cursor-pointer transition-colors group relative"
+                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer ${
+                      darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-50'
+                    }`}
                   >
-                    <div className="flex items-center gap-3 flex-1">
-                      <span className="text-xl">{t.paymentMethod === 'credit' ? '💳' : '💵'}</span>
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-base">{t.paymentMethod === 'credit' ? '💳' : '💵'}</span>
                       <div className="flex-1">
-                        <p className="font-medium text-gray-800">{t.category}</p>
-                        <p className="text-xs text-gray-500">{t.date}</p>
+                        <p className={`text-sm font-medium ${theme.text}`}>{t.category}</p>
+                        <p className={`text-xs ${theme.textSecondary}`}>{t.date}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {!t.settled && <span className="text-xs bg-orange-100 text-orange-600 px-2 py-1 rounded">未確定</span>}
-                      <p className={`font-bold ${t.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {!t.settled && (
+                        <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: '#FF9F0A', color: '#000' }}>
+                          未確定
+                        </span>
+                      )}
+                      <p className={`text-sm font-bold`} style={{ color: t.amount >= 0 ? theme.green : theme.red }}>
                         {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
                       </p>
-                      {deleteConfirmId === t.id ? (
-                        <div className="flex gap-1">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); deleteTransaction(t.id); }}
-                            className="bg-red-500 text-white px-3 py-1 rounded text-xs"
-                          >
-                            削除
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}
-                            className="bg-gray-300 text-gray-700 px-3 py-1 rounded text-xs"
-                          >
-                            戻る
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(t.id); }}
-                          className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700"
-                        >
-                          🗑️
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -812,7 +807,8 @@ export default function BudgetSimulator() {
                     setCloseMonthData({ savedAmount: currentBalance.balance, investAmount: 0 });
                     setShowCloseMonthModal(true);
                   }}
-                  className="w-full mt-4 bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold py-3 rounded-xl"
+                  className="w-full mt-3 py-3 rounded-lg font-bold text-white"
+                  style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
                 >
                   今月を締める
                 </button>
@@ -823,20 +819,20 @@ export default function BudgetSimulator() {
 
         {/* カレンダータブ */}
         {activeTab === 'calendar' && (
-          <div className="space-y-4">
-            <div className="bg-white rounded-2xl shadow-md p-4">
-              <div className="flex items-center justify-between mb-4">
+          <div className="space-y-3">
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-3">
                 <button
                   onClick={() => {
                     const date = new Date(selectedMonth + '-01');
                     date.setMonth(date.getMonth() - 1);
                     setSelectedMonth(date.toISOString().slice(0, 7));
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
                 >
-                  ◀
+                  <span className={theme.text}>◀</span>
                 </button>
-                <h2 className="text-lg font-bold text-gray-800">
+                <h2 className={`text-base font-bold ${theme.text}`}>
                   {new Date(selectedMonth + '-01').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}
                 </h2>
                 <button
@@ -849,16 +845,18 @@ export default function BudgetSimulator() {
                       setSelectedMonth(nextMonth);
                     }
                   }}
-                  className="p-2 hover:bg-gray-100 rounded-lg"
+                  className={`p-2 rounded-lg ${darkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100'}`}
                 >
-                  ▶
+                  <span className={theme.text}>▶</span>
                 </button>
               </div>
 
-              <div className="mb-4">
+              <div className="mb-3">
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {['日', '月', '火', '水', '木', '金', '土'].map((day, i) => (
-                    <div key={day} className={`text-center text-xs font-bold py-2 ${i === 0 ? 'text-red-600' : i === 6 ? 'text-blue-600' : 'text-gray-600'}`}>
+                    <div key={day} className={`text-center text-xs font-bold py-1 ${
+                      i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : theme.textSecondary
+                    }`}>
                       {day}
                     </div>
                   ))}
@@ -880,19 +878,25 @@ export default function BudgetSimulator() {
                       <div
                         key={day}
                         className={`aspect-square border rounded-lg p-1 ${
-                          isToday ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'
-                        } ${hasTransactions ? 'bg-blue-50' : 'bg-white'}`}
+                          isToday 
+                            ? darkMode ? 'border-blue-500 bg-blue-900 bg-opacity-20' : 'border-blue-500 bg-blue-50'
+                            : darkMode ? 'border-gray-800' : 'border-gray-200'
+                        } ${hasTransactions ? (darkMode ? 'bg-gray-800' : 'bg-gray-50') : ''}`}
                       >
-                        <div className={`text-xs font-semibold ${isToday ? 'text-indigo-700' : 'text-gray-700'}`}>
+                        <div className={`text-xs font-semibold ${isToday ? 'text-blue-500' : theme.text}`}>
                           {day}
                         </div>
                         {hasTransactions && (
                           <div className="mt-0.5">
                             {dayBalance.income > 0 && (
-                              <div className="text-[8px] text-green-600 leading-tight">+{(dayBalance.income / 1000).toFixed(0)}k</div>
+                              <div className="text-[8px] leading-tight" style={{ color: theme.green }}>
+                                +{(dayBalance.income / 1000).toFixed(0)}k
+                              </div>
                             )}
                             {dayBalance.expense > 0 && (
-                              <div className="text-[8px] text-red-600 leading-tight">-{(dayBalance.expense / 1000).toFixed(0)}k</div>
+                              <div className="text-[8px] leading-tight" style={{ color: theme.red }}>
+                                -{(dayBalance.expense / 1000).toFixed(0)}k
+                              </div>
                             )}
                           </div>
                         )}
@@ -902,24 +906,27 @@ export default function BudgetSimulator() {
                 </div>
               </div>
 
-              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4">
-                <div className="grid grid-cols-3 gap-4 text-center">
+              <div className={`${darkMode ? 'bg-gray-800' : 'bg-gray-50'} rounded-lg p-3`}>
+                <div className="grid grid-cols-3 gap-3 text-center">
                   <div>
-                    <div className="text-xs text-gray-600 mb-1">収入</div>
-                    <div className="text-lg font-bold text-green-600">
+                    <div className={`text-xs ${theme.textSecondary} mb-1`}>収入</div>
+                    <div className="text-base font-bold" style={{ color: theme.green }}>
                       ¥{calculateMonthlyBalance(selectedMonth).income.toLocaleString()}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-600 mb-1">支出</div>
-                    <div className="text-lg font-bold text-red-600">
+                    <div className={`text-xs ${theme.textSecondary} mb-1`}>支出</div>
+                    <div className="text-base font-bold" style={{ color: theme.red }}>
                       ¥{calculateMonthlyBalance(selectedMonth).expense.toLocaleString()}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-600 mb-1">収支</div>
-                    <div className={`text-lg font-bold ${calculateMonthlyBalance(selectedMonth).balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      {calculateMonthlyBalance(selectedMonth).balance >= 0 ? '+' : ''}¥{calculateMonthlyBalance(selectedMonth).balance.toLocaleString()}
+                    <div className={`text-xs ${theme.textSecondary} mb-1`}>収支</div>
+                    <div className={`text-base font-bold`} style={{ 
+                      color: calculateMonthlyBalance(selectedMonth).balance >= 0 ? theme.green : theme.red 
+                    }}>
+                      {calculateMonthlyBalance(selectedMonth).balance >= 0 ? '+' : ''}
+                      ¥{calculateMonthlyBalance(selectedMonth).balance.toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -927,24 +934,45 @@ export default function BudgetSimulator() {
             </div>
 
             {/* 過去6ヶ月のトレンドグラフ */}
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4">過去6ヶ月の推移</h2>
-              <ResponsiveContainer width="100%" height={200}>
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <h2 className={`text-base font-bold ${theme.text} mb-3`}>過去6ヶ月の推移</h2>
+              <ResponsiveContainer width="100%" height={180}>
                 <AreaChart data={getLast6MonthsTrend()}>
                   <defs>
                     <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      <stop offset="5%" stopColor={theme.green} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={theme.green} stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="month" stroke="#6b7280" style={{ fontSize: '12px' }} />
-                  <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#2C2C2E' : '#f0f0f0'} />
+                  <XAxis 
+                    dataKey="month" 
+                    stroke={darkMode ? '#8E8E93' : '#6b7280'} 
+                    style={{ fontSize: '11px' }} 
+                  />
+                  <YAxis 
+                    stroke={darkMode ? '#8E8E93' : '#6b7280'} 
+                    style={{ fontSize: '11px' }}
+                    tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`}
+                  />
                   <Tooltip 
                     formatter={(value) => `¥${value.toLocaleString()}`}
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
+                    contentStyle={{ 
+                      backgroundColor: darkMode ? '#1C1C1E' : '#fff', 
+                      border: `1px solid ${darkMode ? '#2C2C2E' : '#e5e7eb'}`, 
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      color: darkMode ? '#fff' : '#000'
+                    }}
                   />
-                  <Area type="monotone" dataKey="balance" stroke="#10b981" fillOpacity={1} fill="url(#colorBalance)" />
+                  <Area 
+                    type="monotone" 
+                    dataKey="balance" 
+                    stroke={theme.green} 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorBalance)" 
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -952,39 +980,38 @@ export default function BudgetSimulator() {
         )}
         {/* シミュレーションタブ */}
         {activeTab === 'simulation' && (
-          <div className="space-y-4">
-            {/* 現在の資産 */}
-            <div className="bg-gradient-to-br from-purple-500 to-indigo-600 rounded-2xl shadow-lg p-6">
-              <p className="text-sm text-purple-100 mb-2">現在の資産</p>
-              <p className="text-4xl font-bold text-white mb-4">
+          <div className="space-y-3">
+            {/* 現在の資産 - 株価アプリ風 */}
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <p className={`text-xs ${theme.textSecondary} mb-1`}>現在の資産</p>
+              <p className={`text-4xl font-bold ${theme.text} mb-3`}>
                 ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0)).toLocaleString()}
               </p>
-              <div className="grid grid-cols-3 gap-2 text-sm">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <p className="text-purple-100">貯金</p>
-                  <p className="text-lg font-bold text-white">¥{assetData.savings.toLocaleString()}</p>
+                  <p className={`text-xs ${theme.textSecondary}`}>貯金</p>
+                  <p className={`text-base font-semibold ${theme.text}`}>¥{(assetData.savings / 10000).toFixed(0)}万</p>
                 </div>
                 <div>
-                  <p className="text-indigo-100">投資</p>
-                  <p className="text-lg font-bold text-white">¥{assetData.investments.toLocaleString()}</p>
+                  <p className={`text-xs ${theme.textSecondary}`}>投資</p>
+                  <p className={`text-base font-semibold ${theme.text}`}>¥{(assetData.investments / 10000).toFixed(0)}万</p>
                 </div>
                 <div>
-                  <p className="text-pink-100">NISA</p>
-                  <p className="text-lg font-bold text-white">¥{(assetData.nisa || 0).toLocaleString()}</p>
+                  <p className={`text-xs ${theme.textSecondary}`}>NISA</p>
+                  <p className={`text-base font-semibold`} style={{ color: theme.green }}>
+                    ¥{((assetData.nisa || 0) / 10000).toFixed(0)}万
+                  </p>
                 </div>
               </div>
             </div>
 
             {/* シミュレーション設定 */}
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-                <Target size={20} className="text-indigo-600" />
-                シミュレーション設定
-              </h2>
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <h2 className={`text-base font-bold ${theme.text} mb-3`}>シミュレーション設定</h2>
               
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
                     目標金額: ¥{simulationSettings.targetAmount.toLocaleString()}
                   </label>
                   <input
@@ -999,7 +1026,7 @@ export default function BudgetSimulator() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
                     運用期間: {simulationSettings.years}年
                   </label>
                   <input
@@ -1013,12 +1040,49 @@ export default function BudgetSimulator() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    月々の積立額: ¥{simulationSettings.monthlyInvestment.toLocaleString()}
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
+                    月々の貯金増加額: ¥{simulationSettings.monthlySavings.toLocaleString()}
                   </label>
                   <input
                     type="range"
-                    min="10000"
+                    min="0"
+                    max="200000"
+                    step="10000"
+                    value={simulationSettings.monthlySavings}
+                    onChange={(e) => setSimulationSettings({ ...simulationSettings, monthlySavings: Number(e.target.value) })}
+                    className="w-full"
+                  />
+                  <div className={`flex justify-between text-xs ${theme.textSecondary} mt-1`}>
+                    <span>年間: ¥{(simulationSettings.monthlySavings * 12).toLocaleString()}</span>
+                    <span>利率: {simulationSettings.savingsInterestRate}%</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
+                    貯金の利率: {simulationSettings.savingsInterestRate}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.1"
+                    value={simulationSettings.savingsInterestRate}
+                    onChange={(e) => setSimulationSettings({ ...simulationSettings, savingsInterestRate: Number(e.target.value) })}
+                    className="w-full"
+                  />
+                  <p className={`text-xs ${theme.textSecondary} mt-1`}>
+                    ※普通預金: 0.001%, 定期預金: 0.2%程度
+                  </p>
+                </div>
+
+                <div>
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
+                    月々の積立投資額: ¥{simulationSettings.monthlyInvestment.toLocaleString()}
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
                     max="200000"
                     step="10000"
                     value={simulationSettings.monthlyInvestment}
@@ -1028,7 +1092,7 @@ export default function BudgetSimulator() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
                     想定利回り: {simulationSettings.returnRate}%
                   </label>
                   <input
@@ -1040,19 +1104,18 @@ export default function BudgetSimulator() {
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, returnRate: Number(e.target.value) })}
                     className="w-full"
                   />
-                  <p className="text-xs text-gray-500 mt-1">※全世界株式インデックスの過去平均: 約5-7%</p>
                 </div>
 
                 {/* NISA設定 */}
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-gray-700">
-                      新NISA制度を利用する
+                <div className="border-t pt-3" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className={`text-xs font-medium ${theme.text}`}>
+                      新NISA制度を利用
                     </label>
                     <button
                       onClick={() => setSimulationSettings({ ...simulationSettings, useNisa: !simulationSettings.useNisa })}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        simulationSettings.useNisa ? 'bg-indigo-600' : 'bg-gray-200'
+                        simulationSettings.useNisa ? 'bg-green-500' : darkMode ? 'bg-gray-700' : 'bg-gray-300'
                       }`}
                     >
                       <span
@@ -1063,25 +1126,27 @@ export default function BudgetSimulator() {
                     </button>
                   </div>
                   {simulationSettings.useNisa && (
-                    <div className="bg-indigo-50 rounded-lg p-3 text-xs text-indigo-800">
-                      <p className="font-bold mb-1">🎯 新NISA制度</p>
-                      <p>• つみたて投資枠: 年360万円まで非課税</p>
-                      <p>• 成長投資枠: 年240万円まで非課税</p>
-                      <p>• 生涯投資枠: 1,800万円</p>
+                    <div className={`${darkMode ? 'bg-gray-800' : 'bg-green-50'} rounded-lg p-2 text-xs`}>
+                      <p className={`${darkMode ? 'text-green-400' : 'text-green-800'} font-bold mb-1`}>🎯 新NISA</p>
+                      <p className={darkMode ? 'text-gray-400' : 'text-green-700'}>
+                        • つみたて: 年360万円<br/>
+                        • 成長投資: 年240万円<br/>
+                        • 生涯: 1,800万円
+                      </p>
                     </div>
                   )}
                 </div>
 
                 {/* 成長投資設定 */}
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="text-sm font-medium text-gray-700">
-                      成長投資（一括投資）を追加
+                <div className="border-t pt-3" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className={`text-xs font-medium ${theme.text}`}>
+                      成長投資（一括）
                     </label>
                     <button
                       onClick={() => setSimulationSettings({ ...simulationSettings, useLumpSum: !simulationSettings.useLumpSum })}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        simulationSettings.useLumpSum ? 'bg-purple-600' : 'bg-gray-200'
+                        simulationSettings.useLumpSum ? 'bg-purple-500' : darkMode ? 'bg-gray-700' : 'bg-gray-300'
                       }`}
                     >
                       <span
@@ -1095,8 +1160,8 @@ export default function BudgetSimulator() {
                   {simulationSettings.useLumpSum && (
                     <div className="space-y-3">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          1回あたりの投資額: ¥{simulationSettings.lumpSumAmount.toLocaleString()}
+                        <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
+                          1回あたり: ¥{simulationSettings.lumpSumAmount.toLocaleString()}
                         </label>
                         <input
                           type="range"
@@ -1110,10 +1175,10 @@ export default function BudgetSimulator() {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          投資タイミング（月を選択）
+                        <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
+                          投資月を選択
                         </label>
-                        <div className="grid grid-cols-6 gap-2">
+                        <div className="grid grid-cols-6 gap-1">
                           {[1,2,3,4,5,6,7,8,9,10,11,12].map(month => (
                             <button
                               key={month}
@@ -1124,25 +1189,19 @@ export default function BudgetSimulator() {
                                   : [...months, month].sort((a, b) => a - b);
                                 setSimulationSettings({ ...simulationSettings, lumpSumMonths: newMonths });
                               }}
-                              className={`py-2 rounded-lg text-sm font-medium transition-all ${
+                              className={`py-1 rounded text-xs font-medium transition-all ${
                                 (simulationSettings.lumpSumMonths || []).includes(month)
                                   ? 'bg-purple-500 text-white'
-                                  : 'bg-gray-100 text-gray-600'
+                                  : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                               }`}
                             >
                               {month}月
                             </button>
                           ))}
                         </div>
-                        <p className="text-xs text-gray-500 mt-2">
-                          選択: {(simulationSettings.lumpSumMonths || []).length}回/年
+                        <p className={`text-xs ${theme.textSecondary} mt-1`}>
+                          年間合計: ¥{(simulationSettings.lumpSumAmount * (simulationSettings.lumpSumMonths?.length || 0)).toLocaleString()}
                         </p>
-                      </div>
-
-                      <div className="bg-purple-50 rounded-lg p-3 text-xs text-purple-800">
-                        <p className="font-bold mb-1">💡 成長投資とは</p>
-                        <p>ボーナスや臨時収入で年に数回、まとまった金額を投資する方法です。</p>
-                        <p className="mt-1">年間合計: ¥{(simulationSettings.lumpSumAmount * (simulationSettings.lumpSumMonths?.length || 0)).toLocaleString()}</p>
                       </div>
                     </div>
                   )}
@@ -1151,41 +1210,46 @@ export default function BudgetSimulator() {
             </div>
 
             {/* ライフイベント */}
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-800">ライフイベント</h2>
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className={`text-base font-bold ${theme.text}`}>ライフイベント</h2>
                 <button
                   onClick={() => {
                     setEditingLifeEvent(null);
                     setShowLifeEventModal(true);
                   }}
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold"
+                  className="px-3 py-1 rounded-lg text-xs font-bold text-white"
+                  style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
                 >
                   + 追加
                 </button>
               </div>
 
               {lifeEvents.length === 0 ? (
-                <p className="text-gray-500 text-center py-4">イベントを追加して、将来の計画を立てましょう</p>
+                <p className={`${theme.textSecondary} text-center py-3 text-sm`}>
+                  イベントを追加して将来の計画を立てましょう
+                </p>
               ) : (
                 <div className="space-y-2">
                   {lifeEvents.sort((a, b) => a.date.localeCompare(b.date)).map(event => (
-                    <div key={event.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <div className="flex items-center gap-3 flex-1">
-                        <span className="text-2xl">{event.icon}</span>
+                    <div key={event.id} className={`flex items-center justify-between p-2 ${darkMode ? 'bg-gray-800' : 'bg-gray-50'} rounded-lg`}>
+                      <div className="flex items-center gap-2 flex-1">
+                        <span className="text-xl">{event.icon}</span>
                         <div className="flex-1">
-                          <p className="font-medium text-gray-800">{event.name}</p>
-                          <p className="text-xs text-gray-500">{event.date}</p>
+                          <p className={`text-sm font-medium ${theme.text}`}>{event.name}</p>
+                          <p className={`text-xs ${theme.textSecondary}`}>{event.date}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <p className="font-bold text-red-600">¥{event.amount.toLocaleString()}</p>
+                        <p className="text-sm font-bold" style={{ color: theme.red }}>
+                          ¥{event.amount.toLocaleString()}
+                        </p>
                         <button
                           onClick={() => {
                             setEditingLifeEvent(event);
                             setShowLifeEventModal(true);
                           }}
-                          className="text-indigo-600"
+                          className="text-blue-500"
                         >
                           ✏️
                         </button>
@@ -1203,90 +1267,94 @@ export default function BudgetSimulator() {
             </div>
 
             {/* シミュレーション結果 */}
-            <div className="bg-white rounded-2xl shadow-md p-6">
-              <h2 className="text-lg font-bold text-gray-800 mb-4">
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <h2 className={`text-base font-bold ${theme.text} mb-3`}>
                 {simulationSettings.years}年後の予測
               </h2>
 
-              <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 mb-4">
-                <p className="text-sm text-gray-600 mb-2">予想資産額</p>
-                <p className="text-4xl font-bold text-green-600 mb-2">
+              <div className={`${darkMode ? 'bg-gray-800' : 'bg-green-50'} rounded-xl p-4 mb-3`}>
+                <p className={`text-xs ${theme.textSecondary} mb-1`}>予想資産額</p>
+                <p className="text-3xl font-bold" style={{ color: theme.green }}>
                   ¥{finalValue.toLocaleString()}
                 </p>
-                <div className="w-full bg-gray-200 rounded-full h-3 mb-2">
+                <div className="w-full bg-gray-700 rounded-full h-2 my-2">
                   <div
-                    className="bg-gradient-to-r from-green-500 to-emerald-500 h-3 rounded-full"
-                    style={{ width: `${achievement}%` }}
+                    className="h-2 rounded-full"
+                    style={{ 
+                      width: `${achievement}%`,
+                      backgroundColor: theme.green
+                    }}
                   />
                 </div>
-                <p className="text-sm text-gray-600">
+                <p className={`text-xs ${theme.textSecondary}`}>
                   目標達成率: {achievement.toFixed(1)}%
                 </p>
 
                 {simulationSettings.useNisa && (
-                  <div className="mt-3 pt-3 border-t border-emerald-200">
-                    <p className="text-sm text-green-700 font-bold">
+                  <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${darkMode ? '#2C2C2E' : '#d1fae5'}` }}>
+                    <p className="text-xs font-bold" style={{ color: theme.green }}>
                       💰 NISA節税効果: 約¥{totalTaxSaved.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">
-                      通常の課税口座と比較して、これだけ税金を節約できます
                     </p>
                   </div>
                 )}
               </div>
 
               {achievement >= 100 ? (
-                <div className="bg-green-50 border-2 border-green-500 rounded-xl p-4 text-center mb-4">
-                  <p className="text-2xl mb-2">🎉</p>
-                  <p className="font-bold text-green-800">目標達成可能！</p>
+                <div className={`${darkMode ? 'bg-gray-800' : 'bg-green-50'} border-2 rounded-xl p-3 text-center mb-3`} style={{ borderColor: theme.green }}>
+                  <p className="text-xl mb-1">🎉</p>
+                  <p className="text-sm font-bold" style={{ color: theme.green }}>目標達成可能！</p>
                 </div>
               ) : (
-                <div className="bg-orange-50 border-2 border-orange-300 rounded-xl p-4 mb-4">
-                  <p className="font-bold text-orange-800 mb-2">💡 アドバイス</p>
-                  <p className="text-sm text-orange-700">
-                    目標達成には、月々の投資額を約
+                <div className={`${darkMode ? 'bg-gray-800' : 'bg-orange-50'} border-2 rounded-xl p-3 mb-3`} style={{ borderColor: '#FF9F0A' }}>
+                  <p className="text-xs font-bold mb-1" style={{ color: '#FF9F0A' }}>💡 アドバイス</p>
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-orange-700'}`}>
+                    目標達成には月々約
                     <span className="font-bold"> ¥{Math.ceil((simulationSettings.targetAmount - finalValue) / (simulationSettings.years * 12) / 1000) * 1000}</span>
-                    円増やすことをおすすめします。
+                    円の追加投資が必要です
                   </p>
                 </div>
               )}
 
-              {/* 資産推移グラフ */}
-              <div className="mb-6">
-                <h3 className="font-bold text-gray-800 mb-3">資産推移グラフ</h3>
-                <ResponsiveContainer width="100%" height={300}>
+              {/* 資産推移グラフ - 大きく表示 */}
+              <div className="mb-4">
+                <h3 className={`text-sm font-bold ${theme.text} mb-2`}>資産推移</h3>
+                <ResponsiveContainer width="100%" height={250}>
                   <AreaChart data={chartData}>
                     <defs>
                       <linearGradient id="colorSavings" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.6}/>
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
                       </linearGradient>
                       <linearGradient id="colorInvest" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.8}/>
+                        <stop offset="5%" stopColor="#a855f7" stopOpacity={0.6}/>
                         <stop offset="95%" stopColor="#a855f7" stopOpacity={0.1}/>
                       </linearGradient>
                       <linearGradient id="colorNisa" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.8}/>
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0.1}/>
+                        <stop offset="5%" stopColor={theme.green} stopOpacity={0.6}/>
+                        <stop offset="95%" stopColor={theme.green} stopOpacity={0.1}/>
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#2C2C2E' : '#f0f0f0'} />
                     <XAxis 
                       dataKey="年" 
-                      stroke="#6b7280" 
+                      stroke={darkMode ? '#8E8E93' : '#6b7280'} 
                       style={{ fontSize: '10px' }}
-                      interval="preserveStartEnd"
                     />
                     <YAxis 
-                      stroke="#6b7280" 
+                      stroke={darkMode ? '#8E8E93' : '#6b7280'} 
                       style={{ fontSize: '10px' }}
                       tickFormatter={(value) => `¥${(value / 1000000).toFixed(0)}M`}
                     />
                     <Tooltip 
                       formatter={(value) => `¥${value.toLocaleString()}`}
-                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px' }}
+                      contentStyle={{ 
+                        backgroundColor: darkMode ? '#1C1C1E' : '#fff', 
+                        border: `1px solid ${darkMode ? '#2C2C2E' : '#e5e7eb'}`, 
+                        borderRadius: '8px',
+                        fontSize: '11px'
+                      }}
                     />
-                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                    <Legend wrapperStyle={{ fontSize: '11px' }} />
                     <Area 
                       type="monotone" 
                       dataKey="貯金" 
@@ -1306,54 +1374,32 @@ export default function BudgetSimulator() {
                         type="monotone" 
                         dataKey="NISA" 
                         stackId="1"
-                        stroke="#10b981" 
+                        stroke={theme.green} 
                         fill="url(#colorNisa)" 
                       />
                     )}
-                    <Line 
-                      type="monotone" 
-                      dataKey="合計" 
-                      stroke="#ef4444" 
-                      strokeWidth={2}
-                      dot={false}
-                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
 
-              {/* 年ごとの詳細 */}
-              <div className="space-y-3">
-                <h3 className="font-bold text-gray-800">年ごとの推移</h3>
-                {simulationResults.map(result => (
+              {/* 年ごとの詳細 - コンパクト表示 */}
+              <div className="space-y-2">
+                <h3 className={`text-sm font-bold ${theme.text}`}>年ごとの推移</h3>
+                {simulationResults.filter((_, i) => i % 2 === 0 || i === simulationResults.length - 1).map(result => (
                   <div key={result.year}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-gray-600">{result.year}年後</span>
-                      <div className="text-right">
-                        <span className="font-bold text-gray-800">¥{result.totalValue.toLocaleString()}</span>
-                        {simulationSettings.useNisa && (
-                          <span className="text-xs text-green-600 ml-2">
-                            (NISA: ¥{result.nisaInvestment.toLocaleString()})
-                          </span>
-                        )}
-                      </div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={theme.textSecondary}>{result.year}年後</span>
+                      <span className={`font-bold ${theme.text}`}>¥{result.totalValue.toLocaleString()}</span>
                     </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 mb-2">
+                    <div className="w-full bg-gray-700 rounded-full h-1">
                       <div
-                        className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full"
-                        style={{ width: `${(result.totalValue / simulationSettings.targetAmount) * 100}%` }}
+                        className="h-1 rounded-full"
+                        style={{ 
+                          width: `${(result.totalValue / simulationSettings.targetAmount) * 100}%`,
+                          background: `linear-gradient(to right, ${theme.green}, #a855f7)`
+                        }}
                       />
                     </div>
-                    {result.events.length > 0 && (
-                      <div className="ml-4 space-y-1">
-                        {result.events.map(event => (
-                          <div key={event.id} className="flex items-center gap-2 text-xs text-gray-600">
-                            <span>{event.icon}</span>
-                            <span>{event.name}</span>
-                            <span className="text-red-600">-¥{event.amount.toLocaleString()}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -1361,23 +1407,23 @@ export default function BudgetSimulator() {
           </div>
         )}
       </div>
-      {/* オンボーディング（初回設定）モーダル */}
+      {/* オンボーディングモーダル */}
       {showOnboarding && (
-        <div className="fixed inset-0 bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-3xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto">
+        <div className={`fixed inset-0 ${darkMode ? 'bg-black' : 'bg-gradient-to-br from-indigo-600 to-purple-600'} flex items-center justify-center p-4 z-50`}>
+          <div className={`${theme.card} rounded-3xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto`}>
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">💰</div>
-              <h1 className="text-3xl font-bold text-gray-800 mb-2">
+              <h1 className={`text-3xl font-bold ${theme.text} mb-2`}>
                 マネープランナーへ<br/>ようこそ！
               </h1>
-              <p className="text-gray-600">
+              <p className={theme.textSecondary}>
                 まずは基本情報を入力しましょう
               </p>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
                   お名前（ニックネーム）
                 </label>
                 <input
@@ -1385,12 +1431,14 @@ export default function BudgetSimulator() {
                   placeholder="例：太郎"
                   value={userInfo?.name || ''}
                   onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                  className={`w-full px-4 py-3 rounded-xl ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
                   年齢
                 </label>
                 <input
@@ -1398,12 +1446,14 @@ export default function BudgetSimulator() {
                   placeholder="25"
                   value={userInfo?.age || ''}
                   onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                  className={`w-full px-4 py-3 rounded-xl ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
                   現在の貯金額
                 </label>
                 <input
@@ -1415,15 +1465,17 @@ export default function BudgetSimulator() {
                     const value = e.target.value.replace(/[^0-9]/g, '');
                     setAssetData({ ...assetData, savings: Number(value) });
                   }}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                  className={`w-full px-4 py-3 rounded-xl ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  現在：¥{assetData.savings.toLocaleString()}
+                <p className={`text-xs ${theme.textSecondary} mt-1`}>
+                  ¥{assetData.savings.toLocaleString()}
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
                   現在の投資額（課税口座）
                 </label>
                 <input
@@ -1435,15 +1487,17 @@ export default function BudgetSimulator() {
                     const value = e.target.value.replace(/[^0-9]/g, '');
                     setAssetData({ ...assetData, investments: Number(value) });
                   }}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                  className={`w-full px-4 py-3 rounded-xl ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  現在：¥{assetData.investments.toLocaleString()}
+                <p className={`text-xs ${theme.textSecondary} mt-1`}>
+                  ¥{assetData.investments.toLocaleString()}
                 </p>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
                   現在のNISA投資額
                 </label>
                 <input
@@ -1455,10 +1509,12 @@ export default function BudgetSimulator() {
                     const value = e.target.value.replace(/[^0-9]/g, '');
                     setAssetData({ ...assetData, nisa: Number(value) });
                   }}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:outline-none"
+                  className={`w-full px-4 py-3 rounded-xl ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  } focus:outline-none focus:ring-2 focus:ring-blue-500`}
                 />
-                <p className="text-xs text-gray-500 mt-1">
-                  現在：¥{(assetData.nisa || 0).toLocaleString()}
+                <p className={`text-xs ${theme.textSecondary} mt-1`}>
+                  ¥{(assetData.nisa || 0).toLocaleString()}
                 </p>
               </div>
             </div>
@@ -1471,7 +1527,8 @@ export default function BudgetSimulator() {
                 }
                 setShowOnboarding(false);
               }}
-              className="w-full mt-6 bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-4 rounded-xl hover:opacity-90"
+              className="w-full mt-6 py-4 rounded-xl font-bold text-white"
+              style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
             >
               始める
             </button>
@@ -1482,40 +1539,38 @@ export default function BudgetSimulator() {
       {/* 設定モーダル */}
       {showSettings && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-800 mb-6">設定</h2>
+          <div className={`${theme.card} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
+            <h2 className={`text-xl font-bold ${theme.text} mb-6`}>設定</h2>
 
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">ユーザー情報</h3>
+              <h3 className={`text-base font-bold ${theme.text} mb-4`}>ユーザー情報</h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    お名前
-                  </label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>お名前</label>
                   <input
                     type="text"
                     value={userInfo?.name || ''}
                     onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    年齢
-                  </label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>年齢</label>
                   <input
                     type="number"
                     value={userInfo?.age || ''}
                     onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    貯金額
-                  </label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>貯金額</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1524,17 +1579,17 @@ export default function BudgetSimulator() {
                       const value = e.target.value.replace(/[^0-9]/g, '');
                       setAssetData({ ...assetData, savings: Number(value) });
                     }}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className={`text-xs ${theme.textSecondary} mt-1`}>
                     ¥{assetData.savings.toLocaleString()}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    投資額（課税口座）
-                  </label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>投資額</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1543,17 +1598,17 @@ export default function BudgetSimulator() {
                       const value = e.target.value.replace(/[^0-9]/g, '');
                       setAssetData({ ...assetData, investments: Number(value) });
                     }}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className={`text-xs ${theme.textSecondary} mt-1`}>
                     ¥{assetData.investments.toLocaleString()}
                   </p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    NISA投資額
-                  </label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>NISA投資額</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1562,9 +1617,11 @@ export default function BudgetSimulator() {
                       const value = e.target.value.replace(/[^0-9]/g, '');
                       setAssetData({ ...assetData, nisa: Number(value) });
                     }}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className={`text-xs ${theme.textSecondary} mt-1`}>
                     ¥{(assetData.nisa || 0).toLocaleString()}
                   </p>
                 </div>
@@ -1572,13 +1629,13 @@ export default function BudgetSimulator() {
             </div>
 
             <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-800 mb-4">データ管理</h3>
+              <h3 className={`text-base font-bold ${theme.text} mb-4`}>データ管理</h3>
               <div className="space-y-3">
-                <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-                  <p className="text-sm text-blue-800 mb-2">
-                    💾 データは自動的にこのブラウザに保存されています
+                <div className={`${darkMode ? 'bg-gray-800' : 'bg-blue-50'} border-2 rounded-xl p-4`} style={{ borderColor: darkMode ? '#2C2C2E' : '#bfdbfe' }}>
+                  <p className={`text-sm ${darkMode ? 'text-blue-400' : 'text-blue-800'} mb-2`}>
+                    💾 データは自動保存されています
                   </p>
-                  <p className="text-xs text-blue-600">
+                  <p className={`text-xs ${darkMode ? 'text-gray-400' : 'text-blue-600'}`}>
                     取引数: {transactions.length}件<br/>
                     月次履歴: {Object.keys(monthlyHistory).length}ヶ月<br/>
                     ライフイベント: {lifeEvents.length}件
@@ -1587,11 +1644,12 @@ export default function BudgetSimulator() {
 
                 <button
                   onClick={resetAllData}
-                  className="w-full bg-red-500 text-white font-bold py-3 rounded-xl hover:bg-red-600"
+                  className="w-full py-3 rounded-xl font-bold text-white"
+                  style={{ backgroundColor: theme.red }}
                 >
                   🗑️ 全てのデータを削除
                 </button>
-                <p className="text-xs text-gray-500 text-center">
+                <p className={`text-xs ${theme.textSecondary} text-center`}>
                   ※この操作は取り消せません
                 </p>
               </div>
@@ -1599,7 +1657,8 @@ export default function BudgetSimulator() {
 
             <button
               onClick={() => setShowSettings(false)}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold py-3 rounded-xl"
+              className="w-full py-3 rounded-xl font-bold text-white"
+              style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
             >
               閉じる
             </button>
@@ -1610,15 +1669,15 @@ export default function BudgetSimulator() {
       {/* 月締めモーダル */}
       {showCloseMonthModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">今月を締める</h2>
-            <p className="text-gray-600 mb-4">
-              今月の収支: <span className="font-bold text-indigo-600">¥{currentBalance.balance.toLocaleString()}</span>
+          <div className={`${theme.card} rounded-2xl p-6 max-w-md w-full`}>
+            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>今月を締める</h2>
+            <p className={`${theme.textSecondary} mb-4`}>
+              今月の収支: <span className="font-bold" style={{ color: theme.green }}>¥{currentBalance.balance.toLocaleString()}</span>
             </p>
 
             <div className="space-y-4 mb-6">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
                   投資に回す金額: ¥{closeMonthData.investAmount.toLocaleString()}
                 </label>
                 <input
@@ -1636,14 +1695,14 @@ export default function BudgetSimulator() {
                 />
               </div>
 
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <div className={`${darkMode ? 'bg-gray-800' : 'bg-gray-50'} rounded-lg p-4 space-y-2`}>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">貯金へ</span>
-                  <span className="font-bold text-blue-600">¥{closeMonthData.savedAmount.toLocaleString()}</span>
+                  <span className={theme.textSecondary}>貯金へ</span>
+                  <span className="font-bold" style={{ color: '#3b82f6' }}>¥{closeMonthData.savedAmount.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-600">投資へ</span>
-                  <span className="font-bold text-purple-600">¥{closeMonthData.investAmount.toLocaleString()}</span>
+                  <span className={theme.textSecondary}>投資へ</span>
+                  <span className="font-bold" style={{ color: '#a855f7' }}>¥{closeMonthData.investAmount.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -1651,13 +1710,16 @@ export default function BudgetSimulator() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowCloseMonthModal(false)}
-                className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold"
+                className={`flex-1 px-4 py-3 rounded-xl font-bold ${
+                  darkMode ? 'bg-gray-800 text-white' : 'border-2 border-gray-300 text-gray-700'
+                }`}
               >
                 キャンセル
               </button>
               <button
                 onClick={closeMonth}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold"
+                className="flex-1 px-4 py-3 rounded-xl font-bold text-white"
+                style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
               >
                 確定
               </button>
@@ -1669,15 +1731,17 @@ export default function BudgetSimulator() {
       {/* 取引編集モーダル */}
       {editingTransaction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">取引を編集</h2>
+          <div className={`${theme.card} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
+            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>取引を編集</h2>
 
             <div className="space-y-4">
               <div className="flex gap-2">
                 <button
                   onClick={() => setEditingTransaction({ ...editingTransaction, type: 'expense', amount: -Math.abs(editingTransaction.amount) })}
                   className={`flex-1 py-2 rounded-lg font-bold ${
-                    editingTransaction.type === 'expense' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600'
+                    editingTransaction.type === 'expense' 
+                      ? darkMode ? 'bg-red-600 text-white' : 'bg-red-500 text-white' 
+                      : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                   }`}
                 >
                   支出
@@ -1685,7 +1749,9 @@ export default function BudgetSimulator() {
                 <button
                   onClick={() => setEditingTransaction({ ...editingTransaction, type: 'income', amount: Math.abs(editingTransaction.amount) })}
                   className={`flex-1 py-2 rounded-lg font-bold ${
-                    editingTransaction.type === 'income' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'
+                    editingTransaction.type === 'income' 
+                      ? darkMode ? 'bg-green-600 text-white' : 'bg-green-500 text-white' 
+                      : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                   }`}
                 >
                   収入
@@ -1696,7 +1762,9 @@ export default function BudgetSimulator() {
                 <button
                   onClick={() => setEditingTransaction({ ...editingTransaction, paymentMethod: 'credit' })}
                   className={`flex-1 py-2 rounded-lg text-sm font-medium ${
-                    editingTransaction.paymentMethod === 'credit' ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-600'
+                    editingTransaction.paymentMethod === 'credit' 
+                      ? darkMode ? 'bg-orange-600 text-white' : 'bg-orange-500 text-white' 
+                      : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                   }`}
                 >
                   💳 クレジット
@@ -1704,7 +1772,9 @@ export default function BudgetSimulator() {
                 <button
                   onClick={() => setEditingTransaction({ ...editingTransaction, paymentMethod: 'cash' })}
                   className={`flex-1 py-2 rounded-lg text-sm font-medium ${
-                    editingTransaction.paymentMethod === 'cash' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-600'
+                    editingTransaction.paymentMethod === 'cash' 
+                      ? darkMode ? 'bg-green-600 text-white' : 'bg-green-500 text-white' 
+                      : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
                   }`}
                 >
                   💵 現金
@@ -1712,7 +1782,7 @@ export default function BudgetSimulator() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">金額</label>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>金額</label>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -1722,16 +1792,20 @@ export default function BudgetSimulator() {
                     const amount = editingTransaction.type === 'expense' ? -Math.abs(Number(value)) : Math.abs(Number(value));
                     setEditingTransaction({ ...editingTransaction, amount });
                   }}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                  className={`w-full px-4 py-2 rounded-lg ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  }`}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">カテゴリ</label>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>カテゴリ</label>
                 <select
                   value={editingTransaction.category}
                   onChange={(e) => setEditingTransaction({ ...editingTransaction, category: e.target.value })}
-                  className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                  className={`w-full px-4 py-2 rounded-lg ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  }`}
                 >
                   {categories.map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
@@ -1740,12 +1814,14 @@ export default function BudgetSimulator() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">日付</label>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>日付</label>
                 <input
                   type="date"
                   value={editingTransaction.date}
                   onChange={(e) => setEditingTransaction({ ...editingTransaction, date: e.target.value })}
-                  className="w-full px-2 py-2.5 border-2 border-gray-200 rounded-lg text-sm"
+                  className={`w-full px-2 py-2.5 rounded-lg text-sm ${
+                    darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                  }`}
                 />
               </div>
             </div>
@@ -1756,19 +1832,23 @@ export default function BudgetSimulator() {
                   deleteTransaction(editingTransaction.id);
                   setEditingTransaction(null);
                 }}
-                className="px-4 py-3 bg-red-500 text-white rounded-xl font-bold"
+                className="px-4 py-3 rounded-xl font-bold text-white"
+                style={{ backgroundColor: theme.red }}
               >
                 🗑️
               </button>
               <button
                 onClick={() => setEditingTransaction(null)}
-                className="px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold"
+                className={`px-4 py-3 rounded-xl font-bold ${
+                  darkMode ? 'bg-gray-800 text-white' : 'border-2 border-gray-300 text-gray-700'
+                }`}
               >
                 ✕
               </button>
               <button
                 onClick={() => updateTransaction(editingTransaction)}
-                className="col-span-2 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold"
+                className="col-span-2 px-4 py-3 rounded-xl font-bold text-white"
+                style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
               >
                 保存
               </button>
@@ -1780,14 +1860,14 @@ export default function BudgetSimulator() {
       {/* ライフイベントモーダル */}
       {showLifeEventModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
+          <div className={`${theme.card} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
+            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>
               {editingLifeEvent?.id ? 'イベントを編集' : 'ライフイベントを追加'}
             </h2>
 
             {!editingLifeEvent?.id && !editingLifeEvent?.name && (
               <div className="mb-6">
-                <p className="text-sm font-medium text-gray-700 mb-3">テンプレートを選択</p>
+                <p className={`text-sm font-medium ${theme.textSecondary} mb-3`}>テンプレートを選択</p>
                 <div className="grid grid-cols-2 gap-2">
                   {lifeEventTemplates.map(template => (
                     <button
@@ -1801,10 +1881,14 @@ export default function BudgetSimulator() {
                           type: template.type
                         });
                       }}
-                      className="p-3 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50"
+                      className={`p-3 border-2 rounded-lg ${
+                        darkMode 
+                          ? 'border-gray-700 hover:border-blue-500 hover:bg-gray-800' 
+                          : 'border-gray-200 hover:border-indigo-500 hover:bg-indigo-50'
+                      }`}
                     >
                       <div className="text-2xl mb-1">{template.icon}</div>
-                      <div className="text-sm font-medium text-gray-800">{template.name}</div>
+                      <div className={`text-sm font-medium ${theme.text}`}>{template.name}</div>
                     </button>
                   ))}
                 </div>
@@ -1814,24 +1898,28 @@ export default function BudgetSimulator() {
             {editingLifeEvent?.name && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">イベント名</label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>イベント名</label>
                   <input
                     type="text"
                     value={editingLifeEvent.name}
                     onChange={(e) => setEditingLifeEvent({ ...editingLifeEvent, name: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">アイコン</label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>アイコン</label>
                   <div className="grid grid-cols-8 gap-2">
                     {eventIcons.map(icon => (
                       <button
                         key={icon}
                         onClick={() => setEditingLifeEvent({ ...editingLifeEvent, icon })}
                         className={`text-2xl p-2 rounded-lg ${
-                          editingLifeEvent.icon === icon ? 'bg-indigo-100 ring-2 ring-indigo-500' : 'bg-gray-100'
+                          editingLifeEvent.icon === icon 
+                            ? darkMode ? 'bg-blue-900 ring-2 ring-blue-500' : 'bg-indigo-100 ring-2 ring-indigo-500' 
+                            : darkMode ? 'bg-gray-800' : 'bg-gray-100'
                         }`}
                       >
                         {icon}
@@ -1841,17 +1929,19 @@ export default function BudgetSimulator() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">予定時期</label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>予定時期</label>
                   <input
                     type="month"
                     value={editingLifeEvent.date}
                     onChange={(e) => setEditingLifeEvent({ ...editingLifeEvent, date: e.target.value })}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">予想費用</label>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>予想費用</label>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -1860,7 +1950,9 @@ export default function BudgetSimulator() {
                       const value = e.target.value.replace(/[^0-9]/g, '');
                       setEditingLifeEvent({ ...editingLifeEvent, amount: Number(value) });
                     }}
-                    className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg"
+                    className={`w-full px-4 py-2 rounded-lg ${
+                      darkMode ? 'bg-gray-800 text-white border border-gray-700' : 'bg-white border-2 border-gray-200'
+                    }`}
                   />
                 </div>
 
@@ -1870,13 +1962,16 @@ export default function BudgetSimulator() {
                       setShowLifeEventModal(false);
                       setEditingLifeEvent(null);
                     }}
-                    className="flex-1 px-4 py-3 border-2 border-gray-300 text-gray-700 rounded-xl font-bold"
+                    className={`flex-1 px-4 py-3 rounded-xl font-bold ${
+                      darkMode ? 'bg-gray-800 text-white' : 'border-2 border-gray-300 text-gray-700'
+                    }`}
                   >
                     キャンセル
                   </button>
                   <button
                     onClick={() => addOrUpdateLifeEvent(editingLifeEvent)}
-                    className="flex-1 px-4 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl font-bold"
+                    className="flex-1 px-4 py-3 rounded-xl font-bold text-white"
+                    style={{ backgroundColor: darkMode ? '#0A84FF' : '#007AFF' }}
                   >
                     {editingLifeEvent.id ? '更新' : '追加'}
                   </button>
@@ -1888,33 +1983,33 @@ export default function BudgetSimulator() {
       )}
 
       {/* ボトムナビゲーション */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg">
+      <div className={`fixed bottom-0 left-0 right-0 ${darkMode ? 'bg-gray-900' : 'bg-white'} border-t ${theme.border}`}>
         <div className="max-w-md mx-auto flex">
           <button
             onClick={() => setActiveTab('home')}
-            className={`flex-1 py-4 flex flex-col items-center gap-1 transition-colors ${
-              activeTab === 'home' ? 'text-indigo-600' : 'text-gray-400'
+            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
+              activeTab === 'home' ? darkMode ? 'text-blue-500' : 'text-indigo-600' : theme.textSecondary
             }`}
           >
-            <DollarSign size={24} />
+            <DollarSign size={22} />
             <span className="text-xs font-medium">家計簿</span>
           </button>
           <button
             onClick={() => setActiveTab('calendar')}
-            className={`flex-1 py-4 flex flex-col items-center gap-1 transition-colors ${
-              activeTab === 'calendar' ? 'text-indigo-600' : 'text-gray-400'
+            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
+              activeTab === 'calendar' ? darkMode ? 'text-blue-500' : 'text-indigo-600' : theme.textSecondary
             }`}
           >
-            <Calendar size={24} />
+            <Calendar size={22} />
             <span className="text-xs font-medium">履歴</span>
           </button>
           <button
             onClick={() => setActiveTab('simulation')}
-            className={`flex-1 py-4 flex flex-col items-center gap-1 transition-colors ${
-              activeTab === 'simulation' ? 'text-indigo-600' : 'text-gray-400'
+            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-colors ${
+              activeTab === 'simulation' ? darkMode ? 'text-blue-500' : 'text-indigo-600' : theme.textSecondary
             }`}
           >
-            <TrendingUp size={24} />
+            <TrendingUp size={22} />
             <span className="text-xs font-medium">シミュレーション</span>
           </button>
         </div>
