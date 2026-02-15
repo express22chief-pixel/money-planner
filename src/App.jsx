@@ -4,8 +4,6 @@ import { PlusCircle, TrendingUp, Calendar, DollarSign, PieChart, Target } from '
 
 export default function BudgetSimulator() {
   const [activeTab, setActiveTab] = useState('home');
-  export default function BudgetSimulator() {
-  const [activeTab, setActiveTab] = useState('home');
   const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
   
   // ★★★ ここに以下を追加 ★★★
