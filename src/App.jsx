@@ -413,15 +413,31 @@ export default function BudgetSimulator() {
   };
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 pb-20">
-      {/* ヘッダー */}
+            {/* ヘッダー */}
       <div className="bg-gradient-to-r from-indigo-600 to-purple-600 shadow-lg">
         <div className="max-w-md mx-auto px-6 py-6">
-          <h1 className="text-2xl font-bold text-white mb-1">マネープランナー</h1>
-          <p className="text-sm text-indigo-100">
-            {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
-          </p>
+          {/* ★★★ この部分を置き換え ★★★ */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white mb-1">
+                マネープランナー
+                {userInfo?.name && <span className="text-lg ml-2">- {userInfo.name}さん</span>}
+              </h1>
+              <p className="text-sm text-indigo-100">
+                {new Date().toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric' })}
+              </p>
+            </div>
+            <button
+              onClick={() => setShowSettings(true)}
+              className="text-white hover:bg-white hover:bg-opacity-20 p-2 rounded-lg transition-colors"
+            >
+              ⚙️
+            </button>
+          </div>
+          {/* ★★★ ここまで ★★★ */}
         </div>
       </div>
+
 
       <div className="max-w-md mx-auto p-4">
         {/* ホームタブ */}
