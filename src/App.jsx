@@ -1014,12 +1014,169 @@ export default function BudgetSimulator() {
           </div>
         )}
 
-        {/* カレンダータブは前回と同じなので省略 */}
+                {/* カレンダータブ */}
         {activeTab === 'calendar' && (
           <div className="space-y-3 animate-fadeIn">
-            {/* 前回のカレンダーコードをそのまま使用 */}
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => {
+                    const date = new Date(selectedMonth + '-01');
+                    date.setMonth(date.getMonth() - 1);
+                    setSelectedMonth(date.toISOString().slice(0, 7));
+                  }}
+                  className={`p-2 rounded-lg transition-all duration-200 hover-scale ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'}`}
+                >
+                  <span className={theme.text}>◀</span>
+                </button>
+                <h2 className={`text-base font-semibold ${theme.text} tracking-tight`}>
+                  {new Date(selectedMonth + '-01').toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' })}
+                </h2>
+                <button
+                  onClick={() => {
+                    const date = new Date(selectedMonth + '-01');
+                    date.setMonth(date.getMonth() + 1);
+                    const nextMonth = date.toISOString().slice(0, 7);
+                    const currentMonth = new Date().toISOString().slice(0, 7);
+                    if (nextMonth <= currentMonth) {
+                      setSelectedMonth(nextMonth);
+                    }
+                  }}
+                  className={`p-2 rounded-lg transition-all duration-200 hover-scale ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'}`}
+                >
+                  <span className={theme.text}>▶</span>
+                </button>
+              </div>
+
+              <div className="mb-3">
+                <div className="grid grid-cols-7 gap-1 mb-2">
+                  {['日', '月', '火', '水', '木', '金', '土'].map((day, i) => (
+                    <div key={day} className={`text-center text-xs font-semibold py-1 ${
+                      i === 0 ? 'text-red-500' : i === 6 ? 'text-blue-500' : theme.textSecondary
+                    }`}>
+                      {day}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {[...Array(getFirstDayOfMonth(selectedMonth))].map((_, i) => (
+                    <div key={`empty-${i}`} className="aspect-square"></div>
+                  ))}
+                  
+                  {[...Array(getDaysInMonth(selectedMonth))].map((_, i) => {
+                    const day = i + 1;
+                    const dayTransactions = getTransactionsForDay(selectedMonth, day);
+                    const dayBalance = getDayBalance(selectedMonth, day);
+                    const hasTransactions = dayTransactions.length > 0;
+                    const isToday = selectedMonth === new Date().toISOString().slice(0, 7) && day === new Date().getDate();
+                    
+                    return (
+                      <div
+                        key={day}
+                        className={`aspect-square border rounded-lg p-1 transition-all duration-200 hover-scale ${
+                          isToday 
+                            ? darkMode ? 'border-blue-500 bg-blue-900 bg-opacity-20' : 'border-blue-500 bg-blue-50'
+                            : darkMode ? 'border-neutral-800' : 'border-neutral-200'
+                        } ${hasTransactions ? (darkMode ? 'bg-neutral-800' : 'bg-neutral-50') : ''}`}
+                      >
+                        <div className={`text-xs font-semibold ${isToday ? 'text-blue-500' : theme.text}`}>
+                          {day}
+                        </div>
+                        {hasTransactions && (
+                          <div className="mt-0.5">
+                            {dayBalance.income > 0 && (
+                              <div className="text-[8px] leading-tight tabular-nums" style={{ color: theme.green }}>
+                                +{(dayBalance.income / 1000).toFixed(0)}k
+                              </div>
+                            )}
+                            {dayBalance.expense > 0 && (
+                              <div className="text-[8px] leading-tight tabular-nums" style={{ color: theme.red }}>
+                                -{(dayBalance.expense / 1000).toFixed(0)}k
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3`}>
+                <div className="grid grid-cols-3 gap-3 text-center">
+                  <div>
+                    <div className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>収入</div>
+                    <div className="text-base font-bold tabular-nums" style={{ color: theme.green }}>
+                      ¥{calculateMonthlyBalance(selectedMonth).income.toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>支出</div>
+                    <div className="text-base font-bold tabular-nums" style={{ color: theme.red }}>
+                      ¥{calculateMonthlyBalance(selectedMonth).expense.toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>収支</div>
+                    <div className={`text-base font-bold tabular-nums`} style={{ 
+                      color: calculateMonthlyBalance(selectedMonth).balance >= 0 ? theme.green : theme.red 
+                    }}>
+                      {calculateMonthlyBalance(selectedMonth).balance >= 0 ? '+' : ''}
+                      ¥{calculateMonthlyBalance(selectedMonth).balance.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 過去6ヶ月のトレンドグラフ */}
+            <div className={`${theme.card} rounded-xl p-4`}>
+              <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>過去6ヶ月の推移</h2>
+              <ResponsiveContainer width="100%" height={180}>
+                <AreaChart data={getLast6MonthsTrend()}>
+                  <defs>
+                    <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={theme.green} stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor={theme.green} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#262626' : '#f5f5f5'} />
+                  <XAxis 
+                    dataKey="month" 
+                    stroke={darkMode ? '#737373' : '#a3a3a3'} 
+                    style={{ fontSize: '11px', fontWeight: 500 }} 
+                  />
+                  <YAxis 
+                    stroke={darkMode ? '#737373' : '#a3a3a3'} 
+                    style={{ fontSize: '11px', fontWeight: 500 }}
+                    tickFormatter={(value) => `¥${(value / 10000).toFixed(0)}万`}
+                  />
+                  <Tooltip 
+                    formatter={(value) => `¥${value.toLocaleString()}`}
+                    contentStyle={{ 
+                      backgroundColor: darkMode ? '#171717' : '#fff', 
+                      border: `1px solid ${darkMode ? '#262626' : '#e5e5e5'}`, 
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                      fontWeight: 500,
+                      color: darkMode ? '#fff' : '#000'
+                    }}
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="balance" 
+                    stroke={theme.green} 
+                    strokeWidth={2}
+                    fillOpacity={1} 
+                    fill="url(#colorBalance)" 
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
+
         {/* シミュレーションタブ */}
         {activeTab === 'simulation' && (
           <div className="space-y-3 animate-fadeIn">
@@ -1391,6 +1548,92 @@ export default function BudgetSimulator() {
                   </p>
                 </div>
               )}
+              {/* モンテカルログラフ or 通常グラフ */}
+              <div className="mb-4">
+                {/* 資産割合の表示 - 追加 */}
+                {!simulationSettings.showMonteCarloSimulation && (
+                  <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3 mb-3`}>
+                    <h3 className={`text-xs font-semibold ${theme.text} mb-2 uppercase tracking-wide`}>
+                      {simulationSettings.years}年後の資産構成
+                    </h3>
+                    <div className="flex gap-2 mb-2">
+                      {(() => {
+                        const lastResult = simulationResults[simulationResults.length - 1];
+                        const total = lastResult?.totalValue || 1;
+                        const savingsPercent = ((lastResult?.savings || 0) / total * 100).toFixed(1);
+                        const investPercent = ((lastResult?.regularInvestment || 0) / total * 100).toFixed(1);
+                        const nisaPercent = ((lastResult?.nisaInvestment || 0) / total * 100).toFixed(1);
+                        
+                        return (
+                          <>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1 mb-1">
+                                <div className="w-3 h-3 rounded" style={{ backgroundColor: '#3b82f6' }}></div>
+                                <span className={`text-xs ${theme.textSecondary}`}>貯金</span>
+                              </div>
+                              <p className="text-sm font-bold tabular-nums" style={{ color: '#3b82f6' }}>
+                                {savingsPercent}%
+                              </p>
+                              <p className={`text-xs ${theme.textSecondary} tabular-nums`}>
+                                ¥{((lastResult?.savings || 0) / 10000).toFixed(0)}万
+                              </p>
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1 mb-1">
+                                <div className="w-3 h-3 rounded" style={{ backgroundColor: '#a855f7' }}></div>
+                                <span className={`text-xs ${theme.textSecondary}`}>投資</span>
+                              </div>
+                              <p className="text-sm font-bold tabular-nums" style={{ color: '#a855f7' }}>
+                                {investPercent}%
+                              </p>
+                              <p className={`text-xs ${theme.textSecondary} tabular-nums`}>
+                                ¥{((lastResult?.regularInvestment || 0) / 10000).toFixed(0)}万
+                              </p>
+                            </div>
+                            {simulationSettings.useNisa && (
+                              <div className="flex-1">
+                                <div className="flex items-center gap-1 mb-1">
+                                  <div className="w-3 h-3 rounded" style={{ backgroundColor: theme.green }}></div>
+                                  <span className={`text-xs ${theme.textSecondary}`}>NISA</span>
+                                </div>
+                                <p className="text-sm font-bold tabular-nums" style={{ color: theme.green }}>
+                                  {nisaPercent}%
+                                </p>
+                                <p className={`text-xs ${theme.textSecondary} tabular-nums`}>
+                                  ¥{((lastResult?.nisaInvestment || 0) / 10000).toFixed(0)}万
+                                </p>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                    {/* プログレスバー */}
+                    <div className="w-full h-3 rounded-full overflow-hidden flex">
+                      {(() => {
+                        const lastResult = simulationResults[simulationResults.length - 1];
+                        const total = lastResult?.totalValue || 1;
+                        const savingsPercent = ((lastResult?.savings || 0) / total * 100);
+                        const investPercent = ((lastResult?.regularInvestment || 0) / total * 100);
+                        const nisaPercent = ((lastResult?.nisaInvestment || 0) / total * 100);
+                        
+                        return (
+                          <>
+                            <div style={{ width: `${savingsPercent}%`, backgroundColor: '#3b82f6' }}></div>
+                            <div style={{ width: `${investPercent}%`, backgroundColor: '#a855f7' }}></div>
+                            {simulationSettings.useNisa && (
+                              <div style={{ width: `${nisaPercent}%`, backgroundColor: theme.green }}></div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                <h3 className={`text-xs font-semibold ${theme.text} mb-2 uppercase tracking-wide`}>
+                  {simulationSettings.showMonteCarloSimulation ? '100通りの未来予測' : '資産推移'}
+                </h3>
 
               {/* モンテカルログラフ or 通常グラフ */}
               <div className="mb-4">
