@@ -1692,7 +1692,7 @@ export default function BudgetSimulator() {
             </div>
           </div>
         )}
-            </div>
+      </div>
 
       {/* オンボーディングモーダル */}
       {showOnboarding && (
