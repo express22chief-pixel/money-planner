@@ -1014,7 +1014,7 @@ export default function BudgetSimulator() {
           </div>
         )}
 
-                {/* カレンダータブ */}
+       {/* カレンダータブ */}
         {activeTab === 'calendar' && (
           <div className="space-y-3 animate-fadeIn">
             <div className={`${theme.card} rounded-xl p-4`}>
@@ -1693,6 +1693,7 @@ export default function BudgetSimulator() {
           </div>
         )}
       </div>
+      
       {/* オンボーディングモーダル */}
       {showOnboarding && (
         <div className={`fixed inset-0 ${darkMode ? 'bg-black' : 'bg-neutral-900'} flex items-center justify-center p-4 z-50 animate-fadeIn`}>
