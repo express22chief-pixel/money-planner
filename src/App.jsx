@@ -1689,6 +1689,28 @@ export default function BudgetSimulator() {
                   )}
                 </ResponsiveContainer>
               </div>
+
+              {/* 年ごとの詳細 */}
+              <div className="space-y-2">
+                <h3 className={`text-xs font-semibold ${theme.text} uppercase tracking-wide`}>年ごとの推移</h3>
+                {simulationResults.filter((_, i) => i % 2 === 0 || i === simulationResults.length - 1).map((result, idx) => (
+                  <div key={result.year} className="animate-fadeIn" style={{ animationDelay: `${idx * 0.1}s` }}>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={`${theme.textSecondary} font-medium`}>{result.year}年後</span>
+                      <span className={`font-semibold ${theme.text} tabular-nums`}>¥{result.totalValue.toLocaleString()}</span>
+                    </div>
+                    <div className={`w-full ${darkMode ? 'bg-neutral-800' : 'bg-neutral-200'} rounded-full h-1 overflow-hidden`}>
+                      <div
+                        className="h-1 rounded-full transition-all duration-1000"
+                        style={{ 
+                          width: `${(result.totalValue / simulationSettings.targetAmount) * 100}%`,
+                          background: `linear-gradient(to right, ${theme.green}, #a855f7)`
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
