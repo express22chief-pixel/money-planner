@@ -1,7 +1,7 @@
 import './index.css'
 import React, { useState, useEffect, useCallback } from 'react';
-import { PlusCircle, TrendingUp, Calendar, DollarSign, Sun, Moon, Zap } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { PlusCircle, TrendingUp, Calendar, DollarSign, Sun, Moon, Zap, Droplets } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 
 export default function BudgetSimulator() {
   const [activeTab, setActiveTab] = useState('home');
@@ -36,6 +36,7 @@ export default function BudgetSimulator() {
   const [userInfo, setUserInfo] = useState(() => loadFromStorage('userInfo', null));
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(!loadFromStorage('userInfo', null));
+  const [showBenchmark, setShowBenchmark] = useState(false);
 
   const resetAllData = () => {
     if (window.confirm('本当に全てのデータを削除しますか？この操作は取り消せません。')) {
@@ -48,7 +49,7 @@ export default function BudgetSimulator() {
     loadFromStorage('transactions', [
       { id: 1, date: '2026-02-14', category: '食費', amount: -1200, type: 'expense', paymentMethod: 'credit', settled: false },
       { id: 2, date: '2026-02-13', category: '交通費', amount: -500, type: 'expense', paymentMethod: 'cash', settled: true },
-      { id: 3, date: '2026-02-10', category: '給料', amount: 250000, type: 'income', paymentMethod: 'cash', settled: true },
+      { id: 3, date: '2026-02-10', category: '給料', amount: 250000, type: 'income', settled: true },
     ])
   );
 
@@ -56,7 +57,8 @@ export default function BudgetSimulator() {
     loadFromStorage('assetData', {
       savings: 500000,
       investments: 300000,
-      nisa: 0
+      nisa: 0,
+      dryPowder: 0
     })
   );
 
@@ -139,7 +141,7 @@ export default function BudgetSimulator() {
   }, []);
 
   const [showCloseMonthModal, setShowCloseMonthModal] = useState(false);
-  const [closeMonthData, setCloseMonthData] = useState({ savedAmount: 0, investAmount: 0 });
+  const [closeMonthData, setCloseMonthData] = useState({ savedAmount: 0, investAmount: 0, dryPowderAmount: 0 });
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [showLifeEventModal, setShowLifeEventModal] = useState(false);
   const [editingLifeEvent, setEditingLifeEvent] = useState(null);
@@ -176,6 +178,33 @@ export default function BudgetSimulator() {
 
   const expenseCategories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他'];
   const incomeCategories = ['給料', 'ボーナス', '副業', '投資収益', '年金', 'その他'];
+
+  // 20代平均データ
+  const benchmarkData = {
+    age20s: {
+      savings: 1500000,
+      investments: 500000,
+      nisa: 300000,
+      dryPowder: 200000,
+      monthlyIncome: 280000,
+      monthlyExpense: 200000
+    }
+  };
+
+  const calculateBenchmark = () => {
+    const myTotal = assetData.savings + assetData.investments + assetData.nisa + assetData.dryPowder;
+    const avgTotal = benchmarkData.age20s.savings + benchmarkData.age20s.investments + benchmarkData.age20s.nisa + benchmarkData.age20s.dryPowder;
+    const difference = myTotal - avgTotal;
+    const percentile = myTotal >= avgTotal ? 50 + (difference / avgTotal * 50) : 50 - (Math.abs(difference) / avgTotal * 50);
+    
+    return {
+      myTotal,
+      avgTotal,
+      difference,
+      percentile: Math.max(0, Math.min(100, percentile)),
+      isAboveAverage: difference >= 0
+    };
+  };
   const calculateMonthlyBalance = (yearMonth) => {
     const monthTransactions = transactions.filter(t => 
       t.date.startsWith(yearMonth) && t.settled
@@ -220,8 +249,8 @@ export default function BudgetSimulator() {
       category: newTransaction.category,
       amount: amount,
       type: newTransaction.type,
-      paymentMethod: newTransaction.paymentMethod,
-      settled: newTransaction.paymentMethod === 'cash',
+      paymentMethod: newTransaction.type === 'income' ? undefined : newTransaction.paymentMethod,
+      settled: newTransaction.type === 'income' ? true : (newTransaction.paymentMethod === 'cash'),
       isSettlement: false
     };
 
@@ -259,11 +288,13 @@ export default function BudgetSimulator() {
   const closeMonth = () => {
     const balance = currentBalance.balance;
     const investAmount = closeMonthData.investAmount;
-    const savedAmount = balance - investAmount;
+    const dryPowderAmount = closeMonthData.dryPowderAmount;
+    const savedAmount = balance - investAmount - dryPowderAmount;
 
     setAssetData(prev => ({
       savings: prev.savings + savedAmount,
       investments: prev.investments + investAmount,
+      dryPowder: prev.dryPowder + dryPowderAmount,
       nisa: prev.nisa
     }));
 
@@ -272,7 +303,8 @@ export default function BudgetSimulator() {
       [currentMonth]: {
         balance,
         savedAmount,
-        investAmount
+        investAmount,
+        dryPowderAmount
       }
     }));
 
@@ -358,6 +390,7 @@ export default function BudgetSimulator() {
       let regularInvestment = assetData.investments;
       let nisaInvestment = assetData.nisa || 0;
       let savings = assetData.savings;
+      let dryPowder = assetData.dryPowder || 0;
       
       const NISA_TSUMITATE_LIMIT = 3600000;
       const NISA_GROWTH_LIMIT = 2400000;
@@ -427,7 +460,9 @@ export default function BudgetSimulator() {
           
           const eventsThisMonth = lifeEvents.filter(e => e.date === yearMonth);
           eventsThisMonth.forEach(event => {
-            if (savings >= event.amount) {
+            if (dryPowder >= event.amount) {
+              dryPowder -= event.amount;
+            } else if (savings >= event.amount) {
               savings -= event.amount;
             } else {
               const fromSavings = savings;
@@ -442,7 +477,7 @@ export default function BudgetSimulator() {
           });
         }
         
-        const totalValue = savings + regularInvestment + nisaInvestment;
+        const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
         simulationPath.push({
           year,
           totalValue: Math.round(totalValue)
@@ -476,6 +511,7 @@ export default function BudgetSimulator() {
     let regularInvestment = assetData.investments;
     let nisaInvestment = assetData.nisa || 0;
     let savings = assetData.savings;
+    let dryPowder = assetData.dryPowder || 0;
     
     const NISA_TSUMITATE_LIMIT = 3600000;
     const NISA_GROWTH_LIMIT = 2400000;
@@ -548,7 +584,9 @@ export default function BudgetSimulator() {
         
         const eventsThisMonth = lifeEvents.filter(e => e.date === yearMonth);
         eventsThisMonth.forEach(event => {
-          if (savings >= event.amount) {
+          if (dryPowder >= event.amount) {
+            dryPowder -= event.amount;
+          } else if (savings >= event.amount) {
             savings -= event.amount;
           } else {
             const fromSavings = savings;
@@ -563,7 +601,7 @@ export default function BudgetSimulator() {
         });
       }
 
-      const totalValue = savings + regularInvestment + nisaInvestment;
+      const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
 
       results.push({
         year,
@@ -571,6 +609,7 @@ export default function BudgetSimulator() {
         savings: Math.round(savings),
         regularInvestment: Math.round(regularInvestment),
         nisaInvestment: Math.round(nisaInvestment),
+        dryPowder: Math.round(dryPowder),
         nisaUsed: Math.round(nisaTotalUsed),
         taxSaved: Math.round(yearlyTaxSaved * year),
         yearlyProfit: Math.round(yearlyProfit)
@@ -591,6 +630,7 @@ export default function BudgetSimulator() {
     貯金: result.savings,
     課税口座: result.regularInvestment,
     NISA: result.nisaInvestment,
+    待機資金: result.dryPowder,
     合計: result.totalValue
   }));
 
@@ -633,12 +673,14 @@ export default function BudgetSimulator() {
   const theme = {
     bg: darkMode ? 'bg-black' : 'bg-neutral-50',
     card: darkMode ? 'bg-neutral-900' : 'bg-white',
+    cardGlass: darkMode ? 'glass-dark' : 'glass',
     text: darkMode ? 'text-neutral-100' : 'text-neutral-900',
     textSecondary: darkMode ? 'text-neutral-400' : 'text-neutral-500',
     border: darkMode ? 'border-neutral-800' : 'border-neutral-200',
     green: darkMode ? '#0CD664' : '#10b981',
     red: darkMode ? '#FF453A' : '#ef4444',
     accent: darkMode ? '#0A84FF' : '#3b82f6',
+    purple: darkMode ? '#BF5AF2' : '#a855f7',
     chart: darkMode ? '#1C1C1E' : '#ffffff'
   };
 
@@ -709,12 +751,12 @@ export default function BudgetSimulator() {
       <div className="max-w-md mx-auto p-3">
         {activeTab === 'home' && (
           <div className="space-y-3 animate-fadeIn">
-            <div className={`${theme.card} rounded-xl p-4 transition-all duration-200 hover-scale`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale`}>
               <p className={`text-xs ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>Total Assets</p>
               <p className={`text-4xl font-bold ${theme.text} mb-3 tabular-nums tracking-tight`}>
-                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0)).toLocaleString()}
+                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0) + (assetData.dryPowder || 0)).toLocaleString()}
               </p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div>
                   <p className={`text-xs ${theme.textSecondary} font-medium`}>貯金</p>
                   <p className={`text-base font-semibold ${theme.text} tabular-nums`}>¥{(assetData.savings / 10000).toFixed(0)}万</p>
@@ -727,23 +769,55 @@ export default function BudgetSimulator() {
                   <p className={`text-xs ${theme.textSecondary} font-medium`}>NISA</p>
                   <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.green }}>¥{((assetData.nisa || 0) / 10000).toFixed(0)}万</p>
                 </div>
+                <div>
+                  <p className={`text-xs ${theme.textSecondary} font-medium flex items-center gap-1`}>
+                    <Droplets size={10} style={{ color: theme.accent }} />
+                    待機
+                  </p>
+                  <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.accent }}>¥{((assetData.dryPowder || 0) / 10000).toFixed(0)}万</p>
+                </div>
               </div>
             </div>
 
+            <button
+              onClick={() => setShowBenchmark(true)}
+              className={`w-full ${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale text-left`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className={`text-xs ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>20代平均と比較</p>
+                  <div className="flex items-center gap-2">
+                    <p className={`text-2xl font-bold tabular-nums`} style={{ 
+                      color: calculateBenchmark().isAboveAverage ? theme.green : theme.red 
+                    }}>
+                      {calculateBenchmark().isAboveAverage ? '+' : ''}{(calculateBenchmark().difference / 10000).toFixed(0)}万円
+                    </p>
+                    <span className={`text-xs px-2 py-1 rounded-full font-semibold`} style={{
+                      backgroundColor: calculateBenchmark().isAboveAverage ? 'rgba(12, 214, 100, 0.2)' : 'rgba(255, 69, 58, 0.2)',
+                      color: calculateBenchmark().isAboveAverage ? theme.green : theme.red
+                    }}>
+                      上位{(100 - calculateBenchmark().percentile).toFixed(0)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="text-3xl">📊</div>
+              </div>
+            </button>
+
             <div className="grid grid-cols-3 gap-2">
-              <div className={`${theme.card} rounded-xl p-3 transition-all duration-200 hover-scale`}>
+              <div className={`${theme.cardGlass} rounded-xl p-3 transition-all duration-200 hover-scale`}>
                 <p className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>収入</p>
                 <p className="text-base font-bold tabular-nums" style={{ color: theme.green }}>
                   ¥{(currentBalance.income / 10000).toFixed(1)}万
                 </p>
               </div>
-              <div className={`${theme.card} rounded-xl p-3 transition-all duration-200 hover-scale`}>
+              <div className={`${theme.cardGlass} rounded-xl p-3 transition-all duration-200 hover-scale`}>
                 <p className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>支出</p>
                 <p className="text-base font-bold tabular-nums" style={{ color: theme.red }}>
                   ¥{(currentBalance.expense / 10000).toFixed(1)}万
                 </p>
               </div>
-              <div className={`${theme.card} rounded-xl p-3 transition-all duration-200 hover-scale`}>
+              <div className={`${theme.cardGlass} rounded-xl p-3 transition-all duration-200 hover-scale`}>
                 <p className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>収支</p>
                 <p className={`text-base font-bold tabular-nums`} style={{ color: currentBalance.balance >= 0 ? theme.green : theme.red }}>
                   {currentBalance.balance >= 0 ? '+' : ''}¥{(currentBalance.balance / 10000).toFixed(1)}万
@@ -752,7 +826,7 @@ export default function BudgetSimulator() {
             </div>
 
             {unsettledCredit.length > 0 && (
-              <div className={`${theme.card} rounded-xl p-4 border transition-all duration-200 animate-slideUp`} style={{ borderColor: '#FF9F0A' }}>
+              <div className={`${theme.cardGlass} rounded-xl p-4 border transition-all duration-200 animate-slideUp`} style={{ borderColor: '#FF9F0A' }}>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className={`text-sm font-semibold ${theme.text}`}>💳 未確定のクレジット</p>
@@ -771,7 +845,7 @@ export default function BudgetSimulator() {
               </div>
             )}
 
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 flex items-center gap-2 uppercase tracking-wide`}>
                 <PlusCircle size={16} style={{ color: theme.accent }} />
                 Add Transaction
@@ -805,28 +879,30 @@ export default function BudgetSimulator() {
                   </button>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'credit' })}
-                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover-scale ${
-                      newTransaction.paymentMethod === 'credit'
-                        ? 'bg-orange-500 text-white'
-                        : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
-                    }`}
-                  >
-                    💳 クレジット
-                  </button>
-                  <button
-                    onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'cash' })}
-                    className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover-scale ${
-                      newTransaction.paymentMethod === 'cash'
-                        ? 'bg-green-500 text-white'
-                        : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
-                    }`}
-                  >
-                    💵 現金
-                  </button>
-                </div>
+                {newTransaction.type === 'expense' && (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'credit' })}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover-scale ${
+                        newTransaction.paymentMethod === 'credit'
+                          ? 'bg-orange-500 text-white'
+                          : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                      }`}
+                    >
+                      💳 クレジット
+                    </button>
+                    <button
+                      onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'cash' })}
+                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover-scale ${
+                        newTransaction.paymentMethod === 'cash'
+                          ? 'bg-green-500 text-white'
+                          : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                      }`}
+                    >
+                      💵 現金
+                    </button>
+                  </div>
+                )}
 
                 <input
                   type="text"
@@ -870,7 +946,7 @@ export default function BudgetSimulator() {
             </div>
 
             {calculateCategoryExpenses().length > 0 && (
-              <div className={`${theme.card} rounded-xl p-4 transition-all duration-200`}>
+              <div className={`${theme.cardGlass} rounded-xl p-4 transition-all duration-200`}>
                 <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>今月の支出内訳</h2>
                 
                 <div className="space-y-2">
@@ -904,7 +980,7 @@ export default function BudgetSimulator() {
               </div>
             )}
 
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>最近の取引</h2>
               <div className="space-y-1">
                 {transactions.slice(0, 8).map((t, idx) => (
@@ -917,14 +993,16 @@ export default function BudgetSimulator() {
                     style={{ animationDelay: `${idx * 0.05}s` }}
                   >
                     <div className="flex items-center gap-2 flex-1">
-                      <span className="text-base">{t.paymentMethod === 'credit' ? '💳' : '💵'}</span>
+                      <span className="text-base">
+                        {t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
+                      </span>
                       <div className="flex-1">
                         <p className={`text-sm font-medium ${theme.text}`}>{t.category}</p>
                         <p className={`text-xs ${theme.textSecondary} tabular-nums`}>{t.date}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {!t.settled && (
+                      {!t.settled && t.type === 'expense' && (
                         <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ backgroundColor: '#FF9F0A', color: '#000' }}>
                           未確定
                         </span>
@@ -940,7 +1018,7 @@ export default function BudgetSimulator() {
               {!monthlyHistory[currentMonth] && currentBalance.balance > 0 && (
                 <button
                   onClick={() => {
-                    setCloseMonthData({ savedAmount: currentBalance.balance, investAmount: 0 });
+                    setCloseMonthData({ savedAmount: currentBalance.balance, investAmount: 0, dryPowderAmount: 0 });
                     setShowCloseMonthModal(true);
                   }}
                   className="w-full mt-3 py-3 rounded-lg font-semibold text-white transition-all duration-200 hover-scale"
@@ -952,10 +1030,9 @@ export default function BudgetSimulator() {
             </div>
           </div>
         )}
-
         {activeTab === 'calendar' && (
           <div className="space-y-3 animate-fadeIn">
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <div className="flex items-center justify-between mb-3">
                 <button
                   onClick={() => {
@@ -1068,7 +1145,7 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>過去6ヶ月の推移</h2>
               <ResponsiveContainer width="100%" height={180}>
                 <AreaChart data={getLast6MonthsTrend()}>
@@ -1115,12 +1192,12 @@ export default function BudgetSimulator() {
         )}
         {activeTab === 'simulation' && (
           <div className="space-y-3 animate-fadeIn">
-            <div className={`${theme.card} rounded-xl p-4 transition-all duration-200`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4 transition-all duration-200`}>
               <p className={`text-xs ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>Current Assets</p>
               <p className={`text-4xl font-bold ${theme.text} mb-3 tabular-nums tracking-tight`}>
-                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0)).toLocaleString()}
+                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0) + (assetData.dryPowder || 0)).toLocaleString()}
               </p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div>
                   <p className={`text-xs ${theme.textSecondary} font-medium`}>貯金</p>
                   <p className={`text-base font-semibold ${theme.text} tabular-nums`}>¥{(assetData.savings / 10000).toFixed(0)}万</p>
@@ -1133,10 +1210,17 @@ export default function BudgetSimulator() {
                   <p className={`text-xs ${theme.textSecondary} font-medium`}>NISA</p>
                   <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.green }}>¥{((assetData.nisa || 0) / 10000).toFixed(0)}万</p>
                 </div>
+                <div>
+                  <p className={`text-xs ${theme.textSecondary} font-medium flex items-center gap-1`}>
+                    <Droplets size={10} style={{ color: theme.accent }} />
+                    待機
+                  </p>
+                  <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.accent }}>¥{((assetData.dryPowder || 0) / 10000).toFixed(0)}万</p>
+                </div>
               </div>
             </div>
 
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide flex items-center gap-2`}>
                 <Zap size={16} style={{ color: theme.accent }} />
                 投資スタイル
@@ -1165,7 +1249,7 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>設定</h2>
               
               <div className="space-y-4">
@@ -1368,7 +1452,7 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <div className="flex items-center justify-between mb-3">
                 <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>Life Events</h2>
                 <button
@@ -1422,7 +1506,7 @@ export default function BudgetSimulator() {
               )}
             </div>
 
-            <div className={`${theme.card} rounded-xl p-4`}>
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>
                 {simulationSettings.years}年後の予測
               </h2>
@@ -1481,6 +1565,7 @@ export default function BudgetSimulator() {
                         const savingsPercent = ((lastResult?.savings || 0) / total * 100).toFixed(1);
                         const investPercent = ((lastResult?.regularInvestment || 0) / total * 100).toFixed(1);
                         const nisaPercent = ((lastResult?.nisaInvestment || 0) / total * 100).toFixed(1);
+                        const dryPowderPercent = ((lastResult?.dryPowder || 0) / total * 100).toFixed(1);
                         
                         return (
                           <>
@@ -1522,6 +1607,18 @@ export default function BudgetSimulator() {
                                 </p>
                               </div>
                             )}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-1 mb-1">
+                                <div className="w-3 h-3 rounded" style={{ backgroundColor: theme.accent }}></div>
+                                <span className={`text-xs ${theme.textSecondary}`}>待機</span>
+                              </div>
+                              <p className="text-sm font-bold tabular-nums" style={{ color: theme.accent }}>
+                                {dryPowderPercent}%
+                              </p>
+                              <p className={`text-xs ${theme.textSecondary} tabular-nums`}>
+                                ¥{((lastResult?.dryPowder || 0) / 10000).toFixed(0)}万
+                              </p>
+                            </div>
                           </>
                         );
                       })()}
@@ -1533,6 +1630,7 @@ export default function BudgetSimulator() {
                         const savingsPercent = ((lastResult?.savings || 0) / total * 100);
                         const investPercent = ((lastResult?.regularInvestment || 0) / total * 100);
                         const nisaPercent = ((lastResult?.nisaInvestment || 0) / total * 100);
+                        const dryPowderPercent = ((lastResult?.dryPowder || 0) / total * 100);
                         
                         return (
                           <>
@@ -1541,6 +1639,7 @@ export default function BudgetSimulator() {
                             {simulationSettings.useNisa && (
                               <div style={{ width: `${nisaPercent}%`, backgroundColor: theme.green }}></div>
                             )}
+                            <div style={{ width: `${dryPowderPercent}%`, backgroundColor: theme.accent }}></div>
                           </>
                         );
                       })()}
@@ -1587,6 +1686,10 @@ export default function BudgetSimulator() {
                           <stop offset="5%" stopColor={theme.green} stopOpacity={0.6}/>
                           <stop offset="95%" stopColor={theme.green} stopOpacity={0.1}/>
                         </linearGradient>
+                        <linearGradient id="colorDryPowder" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={theme.accent} stopOpacity={0.6}/>
+                          <stop offset="95%" stopColor={theme.accent} stopOpacity={0.1}/>
+                        </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke={darkMode ? '#262626' : '#f5f5f5'} />
                       <XAxis dataKey="年" stroke={darkMode ? '#737373' : '#a3a3a3'} style={{ fontSize: '10px', fontWeight: 500 }} />
@@ -1596,6 +1699,7 @@ export default function BudgetSimulator() {
                       <Area type="monotone" dataKey="貯金" stackId="1" stroke="#3b82f6" fill="url(#colorSavings)" />
                       <Area type="monotone" dataKey="課税口座" stackId="1" stroke="#a855f7" fill="url(#colorInvest)" />
                       {simulationSettings.useNisa && <Area type="monotone" dataKey="NISA" stackId="1" stroke={theme.green} fill="url(#colorNisa)" />}
+                      <Area type="monotone" dataKey="待機資金" stackId="1" stroke={theme.accent} fill="url(#colorDryPowder)" />
                     </AreaChart>
                   )}
                 </ResponsiveContainer>
@@ -1604,9 +1708,116 @@ export default function BudgetSimulator() {
           </div>
         )}
       </div>
+      {showBenchmark && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto animate-slideUp`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-xl font-bold ${theme.text}`}>20代平均との比較</h2>
+              <button onClick={() => setShowBenchmark(false)} className={`text-2xl ${theme.textSecondary}`}>✕</button>
+            </div>
+
+            <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-xl p-4 mb-4`}>
+              <p className={`text-xs ${theme.textSecondary} mb-2 uppercase tracking-wide`}>あなたの順位</p>
+              <div className="flex items-baseline gap-2">
+                <p className={`text-5xl font-bold tabular-nums`} style={{ 
+                  color: calculateBenchmark().isAboveAverage ? theme.green : theme.red 
+                }}>
+                  {(100 - calculateBenchmark().percentile).toFixed(0)}
+                </p>
+                <span className={`text-2xl font-bold ${theme.text}`}>%</span>
+              </div>
+              <p className={`text-sm ${theme.textSecondary} mt-1`}>
+                {calculateBenchmark().isAboveAverage ? '同世代の上位に位置しています' : 'まだ伸びしろがあります'}
+              </p>
+            </div>
+
+            <div className="space-y-3 mb-4">
+              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3`}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-sm ${theme.textSecondary}`}>総資産</span>
+                  <span className={`text-xs font-semibold`} style={{ 
+                    color: calculateBenchmark().isAboveAverage ? theme.green : theme.red 
+                  }}>
+                    {calculateBenchmark().isAboveAverage ? '+' : ''}{(calculateBenchmark().difference / 10000).toFixed(0)}万円
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1">
+                    <p className={`text-xs ${theme.textSecondary} mb-1`}>あなた</p>
+                    <p className={`text-base font-bold ${theme.text} tabular-nums`}>
+                      ¥{(calculateBenchmark().myTotal / 10000).toFixed(0)}万
+                    </p>
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-xs ${theme.textSecondary} mb-1`}>平均</p>
+                    <p className={`text-base font-bold ${theme.text} tabular-nums`}>
+                      ¥{(calculateBenchmark().avgTotal / 10000).toFixed(0)}万
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3`}>
+                <p className={`text-sm ${theme.textSecondary} mb-2`}>資産構成の比較</p>
+                <div className="space-y-2">
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={theme.textSecondary}>貯金</span>
+                      <span className={theme.text}>¥{(assetData.savings / 10000).toFixed(0)}万 / ¥{(benchmarkData.age20s.savings / 10000).toFixed(0)}万</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <div className="flex-1 h-2 rounded-full bg-blue-500" style={{ width: `${(assetData.savings / benchmarkData.age20s.savings * 100)}%`, maxWidth: '100%' }}></div>
+                      <div className="flex-1 h-2 rounded-full bg-neutral-300"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={theme.textSecondary}>投資</span>
+                      <span className={theme.text}>¥{(assetData.investments / 10000).toFixed(0)}万 / ¥{(benchmarkData.age20s.investments / 10000).toFixed(0)}万</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <div className="flex-1 h-2 rounded-full bg-purple-500" style={{ width: `${(assetData.investments / benchmarkData.age20s.investments * 100)}%`, maxWidth: '100%' }}></div>
+                      <div className="flex-1 h-2 rounded-full bg-neutral-300"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={theme.textSecondary}>NISA</span>
+                      <span className={theme.text}>¥{((assetData.nisa || 0) / 10000).toFixed(0)}万 / ¥{(benchmarkData.age20s.nisa / 10000).toFixed(0)}万</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <div className="flex-1 h-2 rounded-full" style={{ backgroundColor: theme.green, width: `${((assetData.nisa || 0) / benchmarkData.age20s.nisa * 100)}%`, maxWidth: '100%' }}></div>
+                      <div className="flex-1 h-2 rounded-full bg-neutral-300"></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className={theme.textSecondary}>待機資金</span>
+                      <span className={theme.text}>¥{((assetData.dryPowder || 0) / 10000).toFixed(0)}万 / ¥{(benchmarkData.age20s.dryPowder / 10000).toFixed(0)}万</span>
+                    </div>
+                    <div className="flex gap-1">
+                      <div className="flex-1 h-2 rounded-full" style={{ backgroundColor: theme.accent, width: `${((assetData.dryPowder || 0) / benchmarkData.age20s.dryPowder * 100)}%`, maxWidth: '100%' }}></div>
+                      <div className="flex-1 h-2 rounded-full bg-neutral-300"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowBenchmark(false)}
+              className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
+              style={{ backgroundColor: theme.accent }}
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
+
       {showOnboarding && (
         <div className={`fixed inset-0 ${darkMode ? 'bg-black' : 'bg-neutral-900'} flex items-center justify-center p-4 z-50 animate-fadeIn`}>
-          <div className={`${theme.card} rounded-3xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp`}>
+          <div className={`${theme.cardGlass} rounded-3xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp`}>
             <div className="text-center mb-6">
               <div className="text-6xl mb-4">💰</div>
               <h1 className={`text-3xl font-bold ${theme.text} mb-2 tracking-tight`}>Money Planner</h1>
@@ -1693,6 +1904,27 @@ export default function BudgetSimulator() {
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{(assetData.nisa || 0).toLocaleString()}</p>
               </div>
+
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2 flex items-center gap-1`}>
+                  <Droplets size={14} style={{ color: theme.accent }} />
+                  投資待機資金
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={assetData.dryPowder || 0}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '');
+                    setAssetData({ ...assetData, dryPowder: Number(value) });
+                  }}
+                  className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
+                  } focus:outline-none`}
+                />
+                <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{(assetData.dryPowder || 0).toLocaleString()}</p>
+              </div>
             </div>
 
             <button
@@ -1714,7 +1946,7 @@ export default function BudgetSimulator() {
 
       {showSettings && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`${theme.card} rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto`}>
+          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto`}>
             <h2 className={`text-xl font-bold ${theme.text} mb-4`}>設定</h2>
             
             <div className="space-y-4">
@@ -1764,7 +1996,7 @@ export default function BudgetSimulator() {
 
       {showCloseMonthModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`${theme.card} rounded-2xl p-6 max-w-md w-full`}>
+          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full`}>
             <h2 className={`text-xl font-bold ${theme.text} mb-4`}>今月を締める</h2>
             <p className={`${theme.textSecondary} mb-4`}>
               今月の収支: <span className="font-bold" style={{ color: theme.green }}>¥{currentBalance.balance.toLocaleString()}</span>
@@ -1778,13 +2010,33 @@ export default function BudgetSimulator() {
                 <input
                   type="range"
                   min="0"
-                  max={currentBalance.balance}
+                  max={currentBalance.balance - closeMonthData.dryPowderAmount}
                   step="1000"
                   value={closeMonthData.investAmount}
                   onChange={(e) => setCloseMonthData({
                     ...closeMonthData,
                     investAmount: Number(e.target.value),
-                    savedAmount: currentBalance.balance - Number(e.target.value)
+                    savedAmount: currentBalance.balance - Number(e.target.value) - closeMonthData.dryPowderAmount
+                  })}
+                  className="w-full"
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2 flex items-center gap-1`}>
+                  <Droplets size={14} style={{ color: theme.accent }} />
+                  待機資金に回す金額: ¥{closeMonthData.dryPowderAmount.toLocaleString()}
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max={currentBalance.balance - closeMonthData.investAmount}
+                  step="1000"
+                  value={closeMonthData.dryPowderAmount}
+                  onChange={(e) => setCloseMonthData({
+                    ...closeMonthData,
+                    dryPowderAmount: Number(e.target.value),
+                    savedAmount: currentBalance.balance - closeMonthData.investAmount - Number(e.target.value)
                   })}
                   className="w-full"
                 />
@@ -1798,6 +2050,10 @@ export default function BudgetSimulator() {
                 <div className="flex justify-between">
                   <span className={theme.textSecondary}>投資へ</span>
                   <span className="font-bold tabular-nums" style={{ color: '#a855f7' }}>¥{closeMonthData.investAmount.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className={theme.textSecondary}>待機資金へ</span>
+                  <span className="font-bold tabular-nums" style={{ color: theme.accent }}>¥{closeMonthData.dryPowderAmount.toLocaleString()}</span>
                 </div>
               </div>
             </div>
@@ -1825,7 +2081,7 @@ export default function BudgetSimulator() {
 
       {editingTransaction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`${theme.card} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
+          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
             <h2 className={`text-xl font-bold ${theme.text} mb-4`}>取引を編集</h2>
 
             <div className="space-y-4">
