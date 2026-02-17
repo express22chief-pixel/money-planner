@@ -1327,6 +1327,23 @@ export default function BudgetSimulator() {
                   />
                 </div>
 
+                {/* 預金金利の設定を追加 */}
+                <div>
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
+                    預金金利: {simulationSettings.savingsInterestRate}%
+                  </label>
+                  <input
+                    type="range"
+                    min="0"
+                    max="5"
+                    step="0.1"
+                    value={simulationSettings.savingsInterestRate}
+                    onChange={(e) => setSimulationSettings({ ...simulationSettings, savingsInterestRate: Number(e.target.value) })}
+                    className="w-full"
+                  />
+                  <p className={`text-xs ${theme.textSecondary} mt-1`}>普通預金・定期預金の金利を設定</p>
+                </div>
+
                 <div className="border-t pt-3" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
                   <div className="flex items-center justify-between mb-2">
                     <label className={`text-xs font-medium ${theme.text}`}>新NISA制度を利用</label>
