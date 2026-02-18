@@ -399,15 +399,13 @@ export default function BudgetSimulator() {
       t.date.startsWith(yearMonth)
     );
     
-    // PL（発生主義）：全ての取引（クレジット引き落としを除く）
-    const plTransactions = monthTransactions.filter(t => !t.isSettlement);
-    
-    const plIncome = plTransactions
-      .filter(t => t.amount > 0)
+    // PL（発生主義）：クレジット引き落としを除く全取引
+    const plIncome = monthTransactions
+      .filter(t => t.amount > 0 && !t.isSettlement)
       .reduce((sum, t) => sum + t.amount, 0);
     
-    const plExpense = Math.abs(plTransactions
-      .filter(t => t.amount < 0)
+    const plExpense = Math.abs(monthTransactions
+      .filter(t => t.amount < 0 && !t.isSettlement)
       .reduce((sum, t) => sum + t.amount, 0));
     
     // CF（現金主義）：確定済み取引のみ
@@ -434,6 +432,7 @@ export default function BudgetSimulator() {
       unsettledCredit
     };
   };
+
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const currentBalance = calculateMonthlyBalance(currentMonth);
@@ -1337,7 +1336,7 @@ export default function BudgetSimulator() {
                   type="date"
                   value={newTransaction.date}
                   onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-                  className={`w-full px-3 py-2.5 rounded-lg text-sm transition-all duration-200 ${
+                  className={`w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
                     darkMode 
                       ? 'bg-neutral-800 text-white border border-neutral-700' 
                       : 'bg-white border border-neutral-200'
