@@ -656,20 +656,24 @@ export default function BudgetSimulator() {
   const getLast6MonthsTrend = () => {
     const trends = [];
     const today = new Date();
-    
     for (let i = 5; i >= 0; i--) {
+      // ローカル時間で月の初日を取得
       const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
-      const yearMonth = date.toISOString().slice(0, 7);
-      const balance = calculateMonthlyBalance(yearMonth);
       
-      trends.push({
-        month: date.toLocaleDateString('ja-JP', { month: 'short' }),
-        PL: balance.plBalance
+      // タイムゾーンの影響を受けないように、手動で "YYYY-MM" 形式を作る
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const yearMonth = `${year}-${month}`;
+      
+      const balance = calculateMonthlyBalance(yearMonth);
+      trends.push({ 
+        month: date.toLocaleDateString('ja-JP', { month: 'short' }), 
+        PL: balance.plBalance 
       });
     }
-    
     return trends;
   };
+
 
   const addOrUpdateRecurring = (data) => {
     if (editingRecurring?.id) {
