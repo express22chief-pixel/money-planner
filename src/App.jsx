@@ -1336,7 +1336,7 @@ export default function BudgetSimulator() {
                   type="date"
                   value={newTransaction.date}
                   onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
+                  className={`w-full px-2 py-1.5 rounded-lg text-xs transition-all duration-200 ${
                     darkMode 
                       ? 'bg-neutral-800 text-white border border-neutral-700' 
                       : 'bg-white border border-neutral-200'
