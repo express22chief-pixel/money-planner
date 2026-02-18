@@ -3470,7 +3470,7 @@ export default function BudgetSimulator() {
                   type="date"
                   value={editingTransaction.date}
                   onChange={(e) => setEditingTransaction({ ...editingTransaction, date: e.target.value })}
-                  className={`w-full px-2 py-2.5 rounded-lg text-sm ${
+                  className={`w-full px-2 py-2 rounded-lg text-sm ${
                     darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
                   }`}
                   style={{ colorScheme: darkMode ? 'dark' : 'light' }}
