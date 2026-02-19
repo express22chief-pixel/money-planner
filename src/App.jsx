@@ -853,13 +853,12 @@ export default function BudgetSimulator() {
         const savingsInterest = savings * savingsMonthlyRate;
         savings += savingsInterest;
   
-        // 2. 投資元本の投入（NISA枠判定ロジック）
+        // 2. 投資元本の投入判定（NISA枠および生涯上限の管理）
         let currentMonthInvestment = 0;
         if (monthlyInvestment > 0) currentMonthInvestment += monthlyInvestment;
         if (useLumpSum && lumpSumMonths.includes(month)) currentMonthInvestment += lumpSumAmount;
   
         if (currentMonthInvestment > 0) {
-          // NISA優先枠の計算（君の簿価管理ロジックを完全維持）
           if (useNisa && nisaTotalUsed < NISA_TOTAL_LIMIT && nisaUsedThisYear < (NISA_TSUMITATE_LIMIT + (useLumpSum ? NISA_GROWTH_LIMIT : 0))) {
             const availableYearlySpace = (NISA_TSUMITATE_LIMIT + NISA_GROWTH_LIMIT) - nisaUsedThisYear;
             const nisaSpace = Math.min(
@@ -881,20 +880,18 @@ export default function BudgetSimulator() {
           }
         }
   
-        // 3. 運用益の計算と税金の執行
+        // 3. 運用益の計算と税金の執行（特定口座のみ課税再投資）
         const nisaMonthlyProfit = nisaInvestment * monthlyRate;
         const regularMonthlyProfit = regularInvestment * monthlyRate;
         
-        // NISAは全額再投資
         nisaInvestment += nisaMonthlyProfit;
-        // 特定口座は「税引き後」の利益を再投資（複利の精度向上）
         const regularTax = regularMonthlyProfit * TAX_RATE;
         regularInvestment += (regularMonthlyProfit - regularTax);
   
         yearlyProfit += nisaMonthlyProfit + regularMonthlyProfit;
         yearlyTaxSaved += regularTax;
   
-        // 4. ライフイベントの控除（君のプライオリティ・ロジックを完全維持）
+        // 4. ライフイベントの控除（日付一致判定）
         const currentDate = new Date();
         currentDate.setFullYear(currentDate.getFullYear() + year - 1);
         currentDate.setMonth(month - 1);
@@ -921,13 +918,20 @@ export default function BudgetSimulator() {
         });
       }
   
-      // 5. 相対比較と順位ロジックの統合
-      const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
-      const peerAverage = 3500000 + (year * 300000) + (Math.pow(year, 2) * 35000);
+      // 5. 未来時点での相対比較ロジック（ここが修正の核心）
+      const totalValue = Number(savings) + Number(regularInvestment) + Number(nisaInvestment) + Number(dryPowder);
+      
+      // 同年代平均モデル：24歳(350万)をベースに年12%成長する層をベンチマーク化
+      const peerAverage = 3500000 * Math.pow(1.12, year); 
+      
+      // 【修正】未来の自分 vs 未来の平均
       const diff = totalValue - peerAverage;
+      const outperformRate = ((totalValue / peerAverage) - 1) * 100;
+  
+      // 順位ロジック（平均との比率の2乗で算出）
       const ratio = totalValue / peerAverage;
-      let percentile = 50 / Math.pow(ratio, 1.5);
-      percentile = Math.max(0.1, Math.min(95, percentile));
+      let percentile = 50 / Math.pow(ratio, 2); 
+      percentile = Math.max(0.1, Math.min(99, percentile));
   
       results.push({
         year,
@@ -938,6 +942,7 @@ export default function BudgetSimulator() {
         dryPowder: Math.round(dryPowder),
         peerAverage: Math.round(peerAverage),
         diff: Math.round(diff),
+        outperformRate: outperformRate.toFixed(1),
         percentile: percentile.toFixed(1),
         nisaUsed: Math.round(nisaTotalUsed),
         taxSaved: Math.round(yearlyTaxSaved),
@@ -947,6 +952,7 @@ export default function BudgetSimulator() {
   
     return results;
   };
+
 
 
   const simulationResults = calculateSimulation();
