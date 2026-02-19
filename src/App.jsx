@@ -2111,7 +2111,6 @@ export default function BudgetSimulator() {
                       {getAgeGroup(futureAge) === '20s' ? '20代' : getAgeGroup(futureAge) === '30s' ? '30代' : getAgeGroup(futureAge) === '40s' ? '40代' : getAgeGroup(futureAge) === '50s' ? '50代' : '60代以上'}平均との比較
                     </p>
                   </div>
-                  <div className="text-2xl">🎯</div>
                 </div>
 
                 <div className="space-y-2">
