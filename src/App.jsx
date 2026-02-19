@@ -2100,60 +2100,6 @@ export default function BudgetSimulator() {
                 )}
               </div>
 
-              {/* 🎯 新機能: X年後の年代別比較 */}
-              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-blue-50'} rounded-xl p-4 mb-3`}>
-                <div className="flex items-center justify-between mb-2">
-                  <div>
-                    <p className={`text-xs ${theme.textSecondary} font-medium uppercase tracking-wide`}>
-                      {simulationSettings.years}年後（{futureAge}歳時点）
-                    </p>
-                    <p className={`text-sm font-semibold ${theme.text}`}>
-                      {getAgeGroup(futureAge) === '20s' ? '20代' : getAgeGroup(futureAge) === '30s' ? '30代' : getAgeGroup(futureAge) === '40s' ? '40代' : getAgeGroup(futureAge) === '50s' ? '50代' : '60代以上'}平均との比較
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs ${theme.textSecondary}`}>あなたの予想資産</span>
-                    <span className={`text-base font-bold ${theme.text} tabular-nums`}>
-                      ¥{(finalValue / 10000).toFixed(0)}万
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs ${theme.textSecondary}`}>同年代の平均</span>
-                    <span className={`text-sm font-semibold ${theme.textSecondary} tabular-nums`}>
-                      ¥{(futureBenchmark.avgTotal / 10000).toFixed(0)}万
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between pt-2" style={{ borderTop: `1px solid ${darkMode ? '#2C2C2E' : '#dbeafe'}` }}>
-                    <span className={`text-xs font-semibold ${theme.text}`}>差額</span>
-                    <span className={`text-lg font-bold tabular-nums`} style={{ 
-                      color: futureBenchmark.isAboveAverage ? theme.green : theme.red 
-                    }}>
-                      {futureBenchmark.isAboveAverage ? '+' : ''}{(futureBenchmark.difference / 10000).toFixed(0)}万円
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs ${theme.textSecondary}`}>上振れ率</span>
-                    <span className={`text-sm font-bold tabular-nums`} style={{ 
-                      color: futureBenchmark.isAboveAverage ? theme.green : theme.red 
-                    }}>
-                      {futureBenchmark.isAboveAverage ? '+' : ''}{((futureBenchmark.difference / futureBenchmark.avgTotal) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className={`text-xs ${theme.textSecondary}`}>予想順位</span>
-                    <span className={`text-base px-3 py-1 rounded-full font-bold`} style={{
-                      backgroundColor: futureBenchmark.isAboveAverage ? 'rgba(12, 214, 100, 0.2)' : 'rgba(255, 69, 58, 0.2)',
-                      color: futureBenchmark.isAboveAverage ? theme.green : theme.red
-                    }}>
-                      上位{(100 - futureBenchmark.percentile).toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-
               {achievement >= 100 ? (
                 <div className={`${darkMode ? 'bg-neutral-800' : 'bg-green-50'} border-2 rounded-xl p-3 text-center mb-3 animate-pulse-once`} style={{ borderColor: theme.green }}>
                   <p className="text-xl mb-1">🎉</p>
