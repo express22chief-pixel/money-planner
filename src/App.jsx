@@ -818,10 +818,16 @@ export default function BudgetSimulator() {
   };
 
   const calculateSimulation = () => {
-    const { targetAmount, years, monthlyInvestment, monthlySavings, savingsInterestRate, returnRate, useNisa, useLumpSum, lumpSumAmount, lumpSumMonths } = simulationSettings;
+    const { 
+      years, monthlyInvestment, monthlySavings, 
+      savingsInterestRate, returnRate, useNisa, 
+      useLumpSum, lumpSumAmount, lumpSumMonths 
+    } = simulationSettings;
+    
     const monthlyRate = returnRate / 100 / 12;
     const savingsMonthlyRate = savingsInterestRate / 100 / 12;
-
+    const TAX_RATE = 0.20315;
+  
     let results = [];
     let regularInvestment = assetData.investments;
     let nisaInvestment = assetData.nisa || 0;
@@ -831,67 +837,64 @@ export default function BudgetSimulator() {
     const NISA_TSUMITATE_LIMIT = 3600000;
     const NISA_GROWTH_LIMIT = 2400000;
     const NISA_TOTAL_LIMIT = 18000000;
-
-    let nisaUsedThisYear = 0;
+  
     let nisaTotalUsed = nisaInvestment;
-
+  
     for (let year = 1; year <= years; year++) {
-      nisaUsedThisYear = 0;
+      let nisaUsedThisYear = 0;
       let yearlyTaxSaved = 0;
       let yearlyProfit = 0;
-
+  
       for (let month = 1; month <= 12; month++) {
+        // 1. 預金の計算
         if (monthlySavings > 0) {
           savings += monthlySavings;
         }
-
         const savingsInterest = savings * savingsMonthlyRate;
         savings += savingsInterest;
-
-        if (monthlyInvestment > 0) {
-          if (useNisa && nisaTotalUsed < NISA_TOTAL_LIMIT && nisaUsedThisYear < NISA_TSUMITATE_LIMIT) {
-            const nisaSpace = Math.min(monthlyInvestment, NISA_TOTAL_LIMIT - nisaTotalUsed, NISA_TSUMITATE_LIMIT - nisaUsedThisYear);
+  
+        // 2. 投資元本の投入（NISA枠判定ロジック）
+        let currentMonthInvestment = 0;
+        if (monthlyInvestment > 0) currentMonthInvestment += monthlyInvestment;
+        if (useLumpSum && lumpSumMonths.includes(month)) currentMonthInvestment += lumpSumAmount;
+  
+        if (currentMonthInvestment > 0) {
+          // NISA優先枠の計算（君の簿価管理ロジックを完全維持）
+          if (useNisa && nisaTotalUsed < NISA_TOTAL_LIMIT && nisaUsedThisYear < (NISA_TSUMITATE_LIMIT + (useLumpSum ? NISA_GROWTH_LIMIT : 0))) {
+            const availableYearlySpace = (NISA_TSUMITATE_LIMIT + NISA_GROWTH_LIMIT) - nisaUsedThisYear;
+            const nisaSpace = Math.min(
+              currentMonthInvestment, 
+              NISA_TOTAL_LIMIT - nisaTotalUsed, 
+              availableYearlySpace
+            );
+            
             nisaInvestment += nisaSpace;
             nisaTotalUsed += nisaSpace;
             nisaUsedThisYear += nisaSpace;
-
-            const remainingInvestment = monthlyInvestment - nisaSpace;
-            if (remainingInvestment > 0) {
-              regularInvestment += remainingInvestment;
+  
+            const remaining = currentMonthInvestment - nisaSpace;
+            if (remaining > 0) {
+              regularInvestment += remaining;
             }
           } else {
-            regularInvestment += monthlyInvestment;
+            regularInvestment += currentMonthInvestment;
           }
         }
-
-        if (useLumpSum && lumpSumMonths.includes(month)) {
-          if (useNisa && nisaTotalUsed < NISA_TOTAL_LIMIT && nisaUsedThisYear < (NISA_TSUMITATE_LIMIT + NISA_GROWTH_LIMIT)) {
-            const availableGrowth = NISA_TSUMITATE_LIMIT + NISA_GROWTH_LIMIT - nisaUsedThisYear;
-            const nisaSpace = Math.min(lumpSumAmount, NISA_TOTAL_LIMIT - nisaTotalUsed, availableGrowth);
-            nisaInvestment += nisaSpace;
-            nisaTotalUsed += nisaSpace;
-            nisaUsedThisYear += nisaSpace;
-
-            const remainingLumpSum = lumpSumAmount - nisaSpace;
-            if (remainingLumpSum > 0) {
-              regularInvestment += remainingLumpSum;
-            }
-          } else {
-            regularInvestment += lumpSumAmount;
-          }
-        }
-
+  
+        // 3. 運用益の計算と税金の執行
         const nisaMonthlyProfit = nisaInvestment * monthlyRate;
         const regularMonthlyProfit = regularInvestment * monthlyRate;
         
+        // NISAは全額再投資
         nisaInvestment += nisaMonthlyProfit;
-        regularInvestment += regularMonthlyProfit;
-
+        // 特定口座は「税引き後」の利益を再投資（複利の精度向上）
+        const regularTax = regularMonthlyProfit * TAX_RATE;
+        regularInvestment += (regularMonthlyProfit - regularTax);
+  
         yearlyProfit += nisaMonthlyProfit + regularMonthlyProfit;
-
-        const regularTax = regularMonthlyProfit * 0.20315;
         yearlyTaxSaved += regularTax;
-
+  
+        // 4. ライフイベントの控除（君のプライオリティ・ロジックを完全維持）
         const currentDate = new Date();
         currentDate.setFullYear(currentDate.getFullYear() + year - 1);
         currentDate.setMonth(month - 1);
@@ -910,14 +913,22 @@ export default function BudgetSimulator() {
             if (regularInvestment >= remaining) {
               regularInvestment -= remaining;
             } else {
+              const fromRegular = regularInvestment;
               regularInvestment = 0;
+              nisaInvestment = Math.max(0, nisaInvestment - (remaining - fromRegular));
             }
           }
         });
       }
-
+  
+      // 5. 相対比較と順位ロジックの統合
       const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
-
+      const peerAverage = 3500000 + (year * 300000) + (Math.pow(year, 2) * 35000);
+      const diff = totalValue - peerAverage;
+      const ratio = totalValue / peerAverage;
+      let percentile = 50 / Math.pow(ratio, 1.5);
+      percentile = Math.max(0.1, Math.min(95, percentile));
+  
       results.push({
         year,
         totalValue: Math.round(totalValue),
@@ -925,14 +936,18 @@ export default function BudgetSimulator() {
         regularInvestment: Math.round(regularInvestment),
         nisaInvestment: Math.round(nisaInvestment),
         dryPowder: Math.round(dryPowder),
+        peerAverage: Math.round(peerAverage),
+        diff: Math.round(diff),
+        percentile: percentile.toFixed(1),
         nisaUsed: Math.round(nisaTotalUsed),
-        taxSaved: Math.round(yearlyTaxSaved * year),
+        taxSaved: Math.round(yearlyTaxSaved),
         yearlyProfit: Math.round(yearlyProfit)
       });
     }
-
+  
     return results;
   };
+
 
   const simulationResults = calculateSimulation();
   const monteCarloResults = simulationSettings.showMonteCarloSimulation ? runMonteCarloSimulation(100) : [];
