@@ -918,13 +918,13 @@ export default function BudgetSimulator() {
         });
       }
   
-      // 5. 未来時点での相対比較ロジック（ここが修正の核心）
+      // --- ここからが「未来 vs 未来」の比較ロジック ---
       const totalValue = Number(savings) + Number(regularInvestment) + Number(nisaInvestment) + Number(dryPowder);
       
-      // 同年代平均モデル：24歳(350万)をベースに年12%成長する層をベンチマーク化
-      const peerAverage = 3500000 * Math.pow(1.12, year); 
+      // 同年代平均モデル：24歳(350万)をベースに、年6.5%で成長する層をベンチマーク（10年後で約660万）
+      const peerAverage = 3500000 * Math.pow(1.065, year); 
       
-      // 【修正】未来の自分 vs 未来の平均
+      // 未来の予想資産額と、未来の平均との差額
       const diff = totalValue - peerAverage;
       const outperformRate = ((totalValue / peerAverage) - 1) * 100;
   
@@ -952,6 +952,7 @@ export default function BudgetSimulator() {
   
     return results;
   };
+
 
 
 
