@@ -231,6 +231,28 @@ export default function BudgetSimulator() {
     generateRecurringTransactions();
     updateRecurringSettlementStatus();
   }, [recurringTransactions, transactions]);  // transactionsも監視
+  
+  // モーダル表示時に背景のスクロールを無効化
+  useEffect(() => {
+    const isModalOpen = showRecurringModal || showCategoryModal || showBudgetModal || 
+                        showAssetEditModal || showDateTransactionsModal || showBenchmark ||
+                        showLifeEventModal || showSettings || showOnboarding || 
+                        showCloseMonthModal || editingTransaction;
+    
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    
+    // クリーンアップ
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [showRecurringModal, showCategoryModal, showBudgetModal, showAssetEditModal, 
+      showDateTransactionsModal, showBenchmark, showLifeEventModal, showSettings, 
+      showOnboarding, showCloseMonthModal, editingTransaction]);
+
 
   const expenseCategories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他', ...customCategories.expense];
   const incomeCategories = ['給料', 'ボーナス', '副業', '投資収益', '年金', 'その他', ...customCategories.income];
