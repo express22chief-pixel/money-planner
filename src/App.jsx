@@ -25,7 +25,6 @@ export default function BudgetSimulator() {
       showBudgetModal || 
       showRecurringModal || 
       showAssetModal || 
-      showIncomeModal || 
       showCategoryModal || 
       showEventModal || 
       showEditAssetModal;
@@ -41,7 +40,6 @@ export default function BudgetSimulator() {
     showBudgetModal, 
     showRecurringModal, 
     showAssetModal, 
-    showIncomeModal, 
     showCategoryModal, 
     showEventModal, 
     showEditAssetModal
