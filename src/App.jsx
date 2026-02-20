@@ -1602,9 +1602,10 @@ export default function BudgetSimulator() {
                     <div className="flex items-center gap-2">
                       {!t.settled && t.type === 'expense' && (
                         <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ backgroundColor: theme.orange, color: '#000' }}>
-                          未確定
+                          {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
                         </span>
                       )}
+
                       <p className={`text-sm font-bold tabular-nums`} style={{ color: t.amount >= 0 ? theme.green : theme.red }}>
                         {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
                       </p>
