@@ -503,13 +503,7 @@ export default function BudgetSimulator() {
 
   const budgetAnalysis = calculateBudgetAnalysis();
 
-  const unsettledCredit = transactions.filter(t => 
-    t.paymentMethod === 'credit' && !t.settled && !t.isSettlement
-  );
 
-  const totalUnsettledCredit = Math.abs(
-    unsettledCredit.reduce((sum, t) => sum + (t.amount < 0 ? t.amount : 0), 0)
-  );
 
   const addTransaction = () => {
     if (!newTransaction.amount || !newTransaction.category) return;
