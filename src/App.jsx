@@ -513,11 +513,11 @@ export default function BudgetSimulator() {
 
   const addTransaction = () => {
     if (!newTransaction.amount || !newTransaction.category) return;
-
+  
     const amount = newTransaction.type === 'expense' 
       ? -Math.abs(Number(newTransaction.amount))
       : Math.abs(Number(newTransaction.amount));
-
+  
     const transaction = {
       id: Date.now(),
       date: newTransaction.date,
@@ -528,8 +528,28 @@ export default function BudgetSimulator() {
       settled: newTransaction.type === 'income' ? true : (newTransaction.paymentMethod === 'cash'),
       isSettlement: false
     };
-
-    setTransactions([transaction, ...transactions]);
+  
+    // クレジット取引の場合、翌月26日に引き落とし予約を自動作成
+    if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
+      const transactionDate = new Date(newTransaction.date);
+      const settlementDate = new Date(transactionDate.getFullYear(), transactionDate.getMonth() + 1, 26);
+      
+      const settlementTransaction = {
+        id: Date.now() + 1,
+        date: settlementDate.toISOString().slice(0, 10),
+        category: 'クレジット引き落とし',
+        amount: amount,
+        type: 'expense',
+        paymentMethod: 'cash',
+        settled: false,
+        isSettlement: true
+      };
+      
+      setTransactions([transaction, settlementTransaction, ...transactions]);
+    } else {
+      setTransactions([transaction, ...transactions]);
+    }
+  
     setNewTransaction({ 
       amount: '', 
       category: '', 
@@ -538,6 +558,7 @@ export default function BudgetSimulator() {
       date: new Date().toISOString().slice(0, 10)
     });
   };
+
 
   const closeMonth = () => {
     const cfBalance = currentBalance.cfBalance;
@@ -1243,18 +1264,7 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
-            {unsettledCredit.length > 0 && (
-              <div className={`${theme.cardGlass} rounded-xl p-4 border transition-all duration-200 animate-slideUp`} style={{ borderColor: theme.orange }}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className={`text-sm font-semibold ${theme.text}`}>💳 未確定のクレジット</p>
-                    <p className="text-2xl font-bold tabular-nums" style={{ color: theme.orange }}>
-                      ¥{totalUnsettledCredit.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
+           
 
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <div className="flex items-center justify-between mb-3">
