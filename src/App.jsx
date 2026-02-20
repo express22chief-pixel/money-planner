@@ -320,37 +320,114 @@ export default function BudgetSimulator() {
     const currentMonth = today.toISOString().slice(0, 7);
     
     recurringTransactions.forEach(recurring => {
-      const targetDate = `${currentMonth}-${String(recurring.day).padStart(2, '0')}`;
-      
-      const exists = transactions.some(t => 
-        t.date === targetDate && 
-        t.category === recurring.category && 
-        Math.abs(t.amount) === recurring.amount &&
-        t.recurringId === recurring.id
-      );
-      
-      // 日付条件を削除して、当月なら即座に生成
-      if (!exists) {
-        const isPast = new Date(targetDate) <= today;
-        
-        const newTransaction = {
-          id: Date.now() + Math.random(),
-          date: targetDate,
-          category: recurring.category,
-          amount: -recurring.amount,
-          type: recurring.type === 'investment' ? 'expense' : 'expense',
-          paymentMethod: recurring.paymentMethod,
-          settled: recurring.paymentMethod === 'cash' ? isPast : false,  // 過去日なら即確定
-          isRecurring: true,
-          recurringId: recurring.id,
-          recurringName: recurring.name
-        };
-        
-        setTransactions(prev => [newTransaction, ...prev]);
+      // 開始日チェック
+      if (recurring.startDate && currentMonth < recurring.startDate.slice(0, 7)) {
+        return; // まだ開始していない
       }
-
+      
+      // 終了日チェック
+      if (recurring.endDate && currentMonth > recurring.endDate.slice(0, 7)) {
+        return; // 既に終了している
+      }
+      
+      let targetDates = [];
+      
+      // 繰り返しタイプに応じて日付を計算
+      const recurrenceType = recurring.recurrenceType || 'monthly-date';
+      
+      if (recurrenceType === 'monthly-date') {
+        // 日付指定（既存）
+        targetDates.push(`${currentMonth}-${String(recurring.day).padStart(2, '0')}`);
+        
+      } else if (recurrenceType === 'monthly-weekday') {
+        // 曜日指定（第N週の月曜日など）
+        const [year, month] = currentMonth.split('-').map(Number);
+        const firstDay = new Date(year, month - 1, 1);
+        const weekdayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+        const targetWeekday = weekdayMap[recurring.weekday];
+        
+        // 第N週の計算
+        let occurrenceCount = 0;
+        for (let day = 1; day <= 31; day++) {
+          const date = new Date(year, month - 1, day);
+          if (date.getMonth() !== month - 1) break; // 月を超えた
+          
+          if (date.getDay() === targetWeekday) {
+            occurrenceCount++;
+            if (recurring.weekNumber === -1) {
+              // 最終週の場合は後で処理
+              continue;
+            } else if (occurrenceCount === recurring.weekNumber) {
+              targetDates.push(date.toISOString().slice(0, 10));
+              break;
+            }
+          }
+        }
+        
+        // 最終週の処理
+        if (recurring.weekNumber === -1 && occurrenceCount > 0) {
+          for (let day = 31; day >= 1; day--) {
+            const date = new Date(year, month - 1, day);
+            if (date.getMonth() !== month - 1) continue;
+            if (date.getDay() === targetWeekday) {
+              targetDates.push(date.toISOString().slice(0, 10));
+              break;
+            }
+          }
+        }
+        
+      } else if (recurrenceType === 'weekly') {
+        // 週指定
+        const [year, month] = currentMonth.split('-').map(Number);
+        const weekdayMap = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+        const targetWeekday = weekdayMap[recurring.weekday];
+        
+        for (let day = 1; day <= 31; day++) {
+          const date = new Date(year, month - 1, day);
+          if (date.getMonth() !== month - 1) break;
+          
+          if (date.getDay() === targetWeekday) {
+            // 間隔チェック（例: 隔週なら2週ごと）
+            const startDate = new Date(recurring.startDate || '2026-01-01');
+            const weeksDiff = Math.floor((date - startDate) / (7 * 24 * 60 * 60 * 1000));
+            if (weeksDiff % (recurring.interval || 1) === 0) {
+              targetDates.push(date.toISOString().slice(0, 10));
+            }
+          }
+        }
+      }
+      
+      // 各日付に対して取引を生成
+      targetDates.forEach(targetDate => {
+        const exists = transactions.some(t => 
+          t.date === targetDate && 
+          t.category === recurring.category && 
+          Math.abs(t.amount) === recurring.amount &&
+          t.recurringId === recurring.id
+        );
+        
+        if (!exists) {
+          const isPast = new Date(targetDate) <= today;
+          
+          const newTransaction = {
+            id: Date.now() + Math.random(),
+            date: targetDate,
+            category: recurring.category,
+            amount: -recurring.amount,
+            type: recurring.type === 'investment' ? 'expense' : 'expense',
+            paymentMethod: recurring.paymentMethod,
+            settled: recurring.paymentMethod === 'cash' ? isPast : false,
+            isRecurring: true,
+            recurringId: recurring.id,
+            recurringName: recurring.name
+          };
+          
+          setTransactions(prev => [newTransaction, ...prev]);
+        }
+      });
     });
   };
+
   
     // 定期支払いの確定状態を自動更新
   const updateRecurringSettlementStatus = () => {
@@ -2593,20 +2670,198 @@ export default function BudgetSimulator() {
                 </select>
               </div>
 
+              {/* 繰り返しタイプ選択 */}
               <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>支払日（毎月）</label>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>繰り返しのルール</label>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setEditingRecurring({ ...editingRecurring, recurrenceType: 'monthly-date', weekday: null, weekNumber: null })}
+                    className={`w-full py-2 px-3 rounded-lg text-sm font-medium text-left transition-all duration-200 ${
+                      editingRecurring?.recurrenceType === 'monthly-date' || !editingRecurring?.recurrenceType
+                        ? 'bg-blue-500 text-white'
+                        : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                    }`}
+                  >
+                    月（日付指定）
+                  </button>
+                  <button
+                    onClick={() => setEditingRecurring({ ...editingRecurring, recurrenceType: 'monthly-weekday', day: null, weekNumber: 1, weekday: 'monday' })}
+                    className={`w-full py-2 px-3 rounded-lg text-sm font-medium text-left transition-all duration-200 ${
+                      editingRecurring?.recurrenceType === 'monthly-weekday'
+                        ? 'bg-blue-500 text-white'
+                        : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                    }`}
+                  >
+                    月（曜日指定）
+                  </button>
+                  <button
+                    onClick={() => setEditingRecurring({ ...editingRecurring, recurrenceType: 'weekly', day: null, weekday: 'monday' })}
+                    className={`w-full py-2 px-3 rounded-lg text-sm font-medium text-left transition-all duration-200 ${
+                      editingRecurring?.recurrenceType === 'weekly'
+                        ? 'bg-blue-500 text-white'
+                        : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                    }`}
+                  >
+                    週
+                  </button>
+                </div>
+              </div>
+              
+              {/* 日付指定（月・日付指定の場合） */}
+              {(!editingRecurring?.recurrenceType || editingRecurring?.recurrenceType === 'monthly-date') && (
+                <div>
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>日付</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    placeholder="1"
+                    value={editingRecurring?.day || ''}
+                    onChange={(e) => setEditingRecurring({ ...editingRecurring, day: Number(e.target.value) })}
+                    className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
+                      darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    } focus:outline-none focus:border-blue-500`}
+                  />
+                  <p className={`text-xs ${theme.textSecondary} mt-1`}>毎月{editingRecurring?.day || '?'}日</p>
+                </div>
+              )}
+              
+              {/* 曜日指定（月・曜日指定 or 週の場合） */}
+              {(editingRecurring?.recurrenceType === 'monthly-weekday' || editingRecurring?.recurrenceType === 'weekly') && (
+                <div>
+                  {editingRecurring?.recurrenceType === 'monthly-weekday' && (
+                    <div className="mb-3">
+                      <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>第何週</label>
+                      <div className="grid grid-cols-5 gap-2">
+                        {[1, 2, 3, 4, -1].map(num => (
+                          <button
+                            key={num}
+                            onClick={() => setEditingRecurring({ ...editingRecurring, weekNumber: num })}
+                            className={`py-2 rounded-lg text-sm font-medium transition-all ${
+                              editingRecurring?.weekNumber === num
+                                ? 'bg-blue-500 text-white'
+                                : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                            }`}
+                          >
+                            {num === -1 ? '最終' : `第${num}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>曜日</label>
+                  <div className="grid grid-cols-7 gap-1">
+                    {[
+                      { key: 'sunday', label: '日' },
+                      { key: 'monday', label: '月' },
+                      { key: 'tuesday', label: '火' },
+                      { key: 'wednesday', label: '水' },
+                      { key: 'thursday', label: '木' },
+                      { key: 'friday', label: '金' },
+                      { key: 'saturday', label: '土' }
+                    ].map(({ key, label }) => (
+                      <button
+                        key={key}
+                        onClick={() => setEditingRecurring({ ...editingRecurring, weekday: key })}
+                        className={`py-2 rounded-lg text-xs font-medium transition-all ${
+                          editingRecurring?.weekday === key
+                            ? 'bg-blue-500 text-white'
+                            : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* 繰り返しの間隔 */}
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>
+                  繰り返しの間隔: {editingRecurring?.recurrenceType === 'weekly' ? `${editingRecurring?.interval || 1}週` : `${editingRecurring?.interval || 1}ヶ月`}
+                </label>
                 <input
-                  type="number"
+                  type="range"
                   min="1"
-                  max="31"
-                  placeholder="1"
-                  value={editingRecurring?.day || ''}
-                  onChange={(e) => setEditingRecurring({ ...editingRecurring, day: Number(e.target.value) })}
-                  className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
+                  max="12"
+                  value={editingRecurring?.interval || 1}
+                  onChange={(e) => setEditingRecurring({ ...editingRecurring, interval: Number(e.target.value) })}
+                  className="w-full"
+                />
+                <p className={`text-xs ${theme.textSecondary} mt-1`}>
+                  {editingRecurring?.recurrenceType === 'weekly' 
+                    ? `毎${editingRecurring?.interval || 1}週`
+                    : `毎${editingRecurring?.interval || 1}ヶ月`
+                  }
+                </p>
+              </div>
+              
+              {/* 開始日 */}
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>開始日</label>
+                <input
+                  type="date"
+                  value={editingRecurring?.startDate || new Date().toISOString().slice(0, 10)}
+                  onChange={(e) => setEditingRecurring({ ...editingRecurring, startDate: e.target.value })}
+                  className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
                     darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
+                  style={{ colorScheme: darkMode ? 'dark' : 'light' }}
                 />
               </div>
+              
+              {/* 終了日 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className={`text-sm font-medium ${theme.textSecondary}`}>終了日</label>
+                  <button
+                    onClick={() => setEditingRecurring({ ...editingRecurring, endDate: editingRecurring?.endDate ? null : new Date().toISOString().slice(0, 10) })}
+                    className={`text-xs px-2 py-1 rounded font-medium ${
+                      editingRecurring?.endDate ? 'bg-blue-500 text-white' : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                    }`}
+                  >
+                    {editingRecurring?.endDate ? '設定中' : '無期限'}
+                  </button>
+                </div>
+                {editingRecurring?.endDate && (
+                  <input
+                    type="date"
+                    value={editingRecurring.endDate}
+                    onChange={(e) => setEditingRecurring({ ...editingRecurring, endDate: e.target.value })}
+                    className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
+                      darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    } focus:outline-none focus:border-blue-500`}
+                    style={{ colorScheme: darkMode ? 'dark' : 'light' }}
+                  />
+                )}
+              </div>
+              
+              {/* 休日の処理 */}
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>当日が休日の場合</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: 'none', label: '何もしない' },
+                    { key: 'before', label: '前営業日' },
+                    { key: 'after', label: '翌営業日' },
+                    { key: 'skip', label: 'スキップ' }
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setEditingRecurring({ ...editingRecurring, holidayRule: key })}
+                      className={`py-2 rounded-lg text-xs font-medium transition-all ${
+                        (editingRecurring?.holidayRule || 'none') === key
+                          ? 'bg-blue-500 text-white'
+                          : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
 
               <div>
                 <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>種類</label>
