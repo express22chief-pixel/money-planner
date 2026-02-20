@@ -2827,7 +2827,7 @@ export default function BudgetSimulator() {
                   type="date"
                   value={editingRecurring?.startDate || new Date().toISOString().slice(0, 10)}
                   onChange={(e) => setEditingRecurring({ ...editingRecurring, startDate: e.target.value })}
-                  className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
+                  className={`w-full px-3 py-2 rounded-xl text-base appearance-none transition-all duration-200 ${
                     darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                   style={{ colorScheme: darkMode ? 'dark' : 'light' }}
