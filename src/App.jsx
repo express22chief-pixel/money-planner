@@ -232,21 +232,6 @@ export default function BudgetSimulator() {
     updateRecurringSettlementStatus();
   }, [recurringTransactions, transactions]);  // transactionsも監視
 
-  // 設定画面が開いている間、bodyのスクロールを禁止する
-  useEffect(() => {
-    if (showFixedPaymentSettings) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = 'unset';
-    }
-    
-    // コンポーネントがアンマウントされた際のリセット（クリーンアップ）
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
-  }, [showFixedPaymentSettings]);
-
-
   const expenseCategories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他', ...customCategories.expense];
   const incomeCategories = ['給料', 'ボーナス', '副業', '投資収益', '年金', 'その他', ...customCategories.income];
 
@@ -2620,7 +2605,7 @@ export default function BudgetSimulator() {
 
       {showRecurringModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full animate-slideUp max-h-[85vh] overflow-y-auto custom-scrollbar`}>
+          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full animate-slideUp`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-xl font-bold ${theme.text}`}>
                 {editingRecurring ? '定期支払いを編集' : '定期支払いを追加'}
