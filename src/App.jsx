@@ -229,7 +229,8 @@ export default function BudgetSimulator() {
 
   useEffect(() => {
     generateRecurringTransactions();
-  }, [recurringTransactions]);
+    updateRecurringSettlementStatus();
+  }, [recurringTransactions, transactions]);  // transactionsも監視
 
   const expenseCategories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他', ...customCategories.expense];
   const incomeCategories = ['給料', 'ボーナス', '副業', '投資収益', '年金', 'その他', ...customCategories.income];
@@ -328,7 +329,10 @@ export default function BudgetSimulator() {
         t.recurringId === recurring.id
       );
       
-      if (!exists && new Date(targetDate) <= today) {
+      // 日付条件を削除して、当月なら即座に生成
+      if (!exists) {
+        const isPast = new Date(targetDate) <= today;
+        
         const newTransaction = {
           id: Date.now() + Math.random(),
           date: targetDate,
@@ -336,7 +340,7 @@ export default function BudgetSimulator() {
           amount: -recurring.amount,
           type: recurring.type === 'investment' ? 'expense' : 'expense',
           paymentMethod: recurring.paymentMethod,
-          settled: recurring.paymentMethod === 'cash',
+          settled: recurring.paymentMethod === 'cash' ? isPast : false,  // 過去日なら即確定
           isRecurring: true,
           recurringId: recurring.id,
           recurringName: recurring.name
@@ -344,8 +348,24 @@ export default function BudgetSimulator() {
         
         setTransactions(prev => [newTransaction, ...prev]);
       }
+
     });
   };
+  
+    // 定期支払いの確定状態を自動更新
+  const updateRecurringSettlementStatus = () => {
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    
+    setTransactions(prev => prev.map(t => {
+      // 未確定の定期支払いで、支払日が今日以前なら確定に変更
+      if (t.isRecurring && !t.settled && t.paymentMethod === 'cash' && t.date <= todayStr) {
+        return { ...t, settled: true };
+      }
+      return t;
+    }));
+  };
+
 
   const addCustomCategory = () => {
     if (!newCategoryName.trim()) {
@@ -1569,9 +1589,7 @@ export default function BudgetSimulator() {
                     date.setMonth(date.getMonth() + 1);
                     const nextMonth = date.toISOString().slice(0, 7);
                     const currentMonth = new Date().toISOString().slice(0, 7);
-                    if (nextMonth <= currentMonth) {
-                      setSelectedMonth(nextMonth);
-                    }
+                    setSelectedMonth(nextMonth);
                   }}
                   className={`p-2 rounded-lg transition-all duration-200 hover-scale ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'}`}
                 >
@@ -2671,7 +2689,7 @@ export default function BudgetSimulator() {
                       <p className={`text-sm font-medium ${theme.text}`}>{t.category}</p>
                       {!t.settled && t.type === 'expense' && (
                         <span className="text-xs px-2 py-0.5 rounded font-medium mt-1 inline-block" style={{ backgroundColor: theme.orange, color: '#000' }}>
-                          未確定
+                          {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
                         </span>
                       )}
                     </div>
