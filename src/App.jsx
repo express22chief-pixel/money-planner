@@ -16,6 +16,37 @@ export default function BudgetSimulator() {
     }, 2500);
     return () => clearTimeout(timer);
   }, []);
+  
+    // 追加：モーダル表示時に背景スクロールを禁止する（完全同期版）
+  useEffect(() => {
+    // このファイルに実在する変数名のみを使用
+    const isModalOpen = 
+      showSettings || 
+      showBudgetModal || 
+      showRecurringModal || 
+      showAssetModal || 
+      showIncomeModal || 
+      showCategoryModal || 
+      showEventModal || 
+      showEditAssetModal;
+
+    if (isModalOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [
+    showSettings, 
+    showBudgetModal, 
+    showRecurringModal, 
+    showAssetModal, 
+    showIncomeModal, 
+    showCategoryModal, 
+    showEventModal, 
+    showEditAssetModal
+  ]);
+
 
   function loadFromStorage(key, defaultValue) {
     try {
