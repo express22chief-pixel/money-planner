@@ -777,8 +777,15 @@ export default function BudgetSimulator() {
   };
 
   const calculateCategoryExpenses = () => {
+    // 投資積立・投資信託の定期支払いIDセット
+    const investRecurringIds = new Set(
+      recurringTransactions
+        .filter(r => r.type === 'investment' || r.type === 'fund')
+        .map(r => r.id)
+    );
     const currentMonthTransactions = transactions.filter(t => 
       t.date.startsWith(currentMonth) && t.amount < 0 && !t.isSettlement
+      && !(t.recurringId && investRecurringIds.has(t.recurringId))
     );
 
     const categoryTotals = currentMonthTransactions.reduce((acc, t) => {
@@ -1289,484 +1296,136 @@ export default function BudgetSimulator() {
       <div className="max-w-md mx-auto p-3">
         {activeTab === 'home' && (
           <div className="space-y-3 animate-fadeIn">
-            <button
-              onClick={() => setShowAssetEditModal(true)}
-              className={`w-full ${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale text-left`}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs ${theme.textSecondary} font-medium uppercase tracking-wide`}>Total Assets</p>
-                <Edit2 size={14} className={theme.textSecondary} />
-              </div>
-              <p className={`text-4xl font-bold ${theme.text} mb-3 tabular-nums tracking-tight`}>
-                ¥{((isNaN(assetData.savings) ? 0 : assetData.savings) + (isNaN(assetData.investments) ? 0 : assetData.investments) + (isNaN(assetData.nisa) ? 0 : (assetData.nisa || 0)) + (isNaN(assetData.dryPowder) ? 0 : (assetData.dryPowder || 0))).toLocaleString()}
-              </p>
-              <div className="grid grid-cols-4 gap-3">
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium`}>貯金</p>
-                  <p className={`text-base font-semibold ${theme.text} tabular-nums`}>¥{(assetData.savings / 10000).toFixed(0)}万</p>
-                </div>
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium`}>投資</p>
-                  <p className={`text-base font-semibold ${theme.text} tabular-nums`}>¥{(assetData.investments / 10000).toFixed(0)}万</p>
-                </div>
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium`}>NISA</p>
-                  <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.green }}>¥{((assetData.nisa || 0) / 10000).toFixed(0)}万</p>
-                </div>
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium flex items-center gap-1`}>
-                    <Droplets size={10} style={{ color: theme.accent }} />
-                    待機
-                  </p>
-                  <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.accent }}>¥{((assetData.dryPowder || 0) / 10000).toFixed(0)}万</p>
-                </div>
-              </div>
-            </button>
 
-            <button
-              onClick={() => setShowInvestModal(true)}
-              className={`w-full ${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale text-left`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className={`text-xs ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>投資を実行する</p>
-                  <p className={`text-sm font-semibold ${theme.text}`}>現預金・待機資金 → 投資口座に振替</p>
-                </div>
-                <div className="text-3xl">📈</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setShowBenchmark(true)}
-              className={`w-full ${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale text-left`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <p className={`text-xs ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>
-                    {getAgeGroup() === '20s' ? '20代' : getAgeGroup() === '30s' ? '30代' : getAgeGroup() === '40s' ? '40代' : getAgeGroup() === '50s' ? '50代' : '60代以上'}平均と比較
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <p className={`text-2xl font-bold tabular-nums`} style={{ 
-                      color: calculateBenchmark().isAboveAverage ? theme.green : theme.red 
-                    }}>
-                      {calculateBenchmark().isAboveAverage ? '+' : ''}{(calculateBenchmark().difference / 10000).toFixed(0)}万円
-                    </p>
-                    <span className={`text-xs px-2 py-1 rounded-full font-semibold`} style={{
-                      backgroundColor: calculateBenchmark().isAboveAverage ? 'rgba(12, 214, 100, 0.2)' : 'rgba(255, 69, 58, 0.2)',
-                      color: calculateBenchmark().isAboveAverage ? theme.green : theme.red
-                    }}>
-                      上位{(100 - calculateBenchmark().percentile).toFixed(1)}%
-                    </span>
-                  </div>
-                </div>
-                <div className="text-3xl">📊</div>
-              </div>
-            </button>
-
-            <button
-              onClick={() => setShowBudgetModal(true)}
-              className={`w-full ${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale text-left`}
-            >
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Target size={16} style={{ color: theme.accent }} />
-                  <p className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>今月の予算vs実績</p>
-                </div>
-                <Settings size={16} className={theme.textSecondary} />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} mb-1`}>収入（PL）</p>
-                  <div className="flex items-baseline gap-1">
-                    <p className={`text-lg font-bold tabular-nums`} style={{ 
-                      color: budgetAnalysis.income.difference >= 0 ? theme.green : theme.red 
-                    }}>
-                      ¥{(budgetAnalysis.income.actual / 10000).toFixed(0)}万
-                    </p>
-                    <p className={`text-xs ${theme.textSecondary} tabular-nums`}>
-                      / {(budgetAnalysis.income.budgeted / 10000).toFixed(0)}万
-                    </p>
-                  </div>
-                </div>
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} mb-1`}>支出（PL）</p>
-                  <div className="flex items-baseline gap-1">
-                    <p className={`text-lg font-bold tabular-nums`} style={{ 
-                      color: budgetAnalysis.expense.difference <= 0 ? theme.green : theme.red 
-                    }}>
-                      ¥{(budgetAnalysis.expense.actual / 10000).toFixed(0)}万
-                    </p>
-                    <p className={`text-xs ${theme.textSecondary} tabular-nums`}>
-                      / {(budgetAnalysis.expense.budgeted / 10000).toFixed(0)}万
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3 space-y-2`}>
-                <div className="flex justify-between items-center">
-                  <span className={`text-xs ${theme.textSecondary}`}>PL（発生ベース）</span>
-                  <span className={`text-sm font-bold tabular-nums`} style={{ 
-                    color: currentBalance.plBalance >= 0 ? theme.green : theme.red 
-                  }}>
-                    {currentBalance.plBalance >= 0 ? '+' : ''}¥{currentBalance.plBalance.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className={`text-xs ${theme.textSecondary}`}>CF（現金ベース）</span>
-                  <span className={`text-sm font-bold tabular-nums`} style={{ 
-                    color: currentBalance.cfBalance >= 0 ? theme.green : theme.red 
-                  }}>
-                    {currentBalance.cfBalance >= 0 ? '+' : ''}¥{currentBalance.cfBalance.toLocaleString()}
-                  </span>
-                </div>
-                {currentBalance.unsettledCredit > 0 && (
-                  <div className="flex justify-between items-center pt-2" style={{ borderTop: `1px solid ${darkMode ? '#2C2C2E' : '#e5e7eb'}` }}>
-                    <span className={`text-xs ${theme.textSecondary}`}>未確定クレジット</span>
-                    <span className={`text-xs font-semibold tabular-nums`} style={{ color: theme.orange }}>
-                      ¥{currentBalance.unsettledCredit.toLocaleString()}
-                    </span>
-                  </div>
-                )}
-                <div className="border-t pt-2" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
-                  <div className="flex justify-between items-center">
-                    <span className={`text-xs ${theme.textSecondary}`}>投資計画額</span>
-                    <span className={`text-sm font-bold tabular-nums ${theme.text}`}>
-                      ¥{budgetAnalysis.investment.planned.toLocaleString()}
-                    </span>
-                  </div>
-                  {budgetAnalysis.investment.needsWithdrawal && (
-                    <div className="flex justify-between items-center mt-1">
-                      <span className={`text-xs ${theme.textSecondary}`}>貯金から取り崩し</span>
-                      <span className={`text-xs font-semibold tabular-nums`} style={{ color: theme.orange }}>
-                        ¥{budgetAnalysis.investment.withdrawalAmount.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center mt-1">
-                    <span className={`text-xs ${theme.textSecondary}`}>実行可能性</span>
-                    <span className={`text-xs px-2 py-1 rounded-full font-semibold`} style={{
-                      backgroundColor: budgetAnalysis.investment.needsWithdrawal ? 'rgba(255, 159, 10, 0.2)' : 'rgba(12, 214, 100, 0.2)',
-                      color: budgetAnalysis.investment.needsWithdrawal ? theme.orange : theme.green
-                    }}>
-                      {budgetAnalysis.investment.needsWithdrawal ? '⚠ 貯金取崩' : '✓ CF内で可能'}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </button>
-
-            <div className="grid grid-cols-3 gap-2">
-              <div className={`${theme.cardGlass} rounded-xl p-3 transition-all duration-200 hover-scale`}>
-                <p className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>収入</p>
-                <p className="text-base font-bold tabular-nums" style={{ color: theme.green }}>
-                  ¥{(currentBalance.plIncome / 10000).toFixed(1)}万
-                </p>
-              </div>
-              <div className={`${theme.cardGlass} rounded-xl p-3 transition-all duration-200 hover-scale`}>
-                <p className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>支出</p>
-                <p className="text-base font-bold tabular-nums" style={{ color: theme.red }}>
-                  ¥{(currentBalance.plExpense / 10000).toFixed(1)}万
-                </p>
-              </div>
-              <div className={`${theme.cardGlass} rounded-xl p-3 transition-all duration-200 hover-scale`}>
-                <p className={`text-xs ${theme.textSecondary} mb-1 font-medium`}>収支</p>
-                <p className={`text-base font-bold tabular-nums`} style={{ color: currentBalance.plBalance >= 0 ? theme.green : theme.red }}>
-                  {currentBalance.plBalance >= 0 ? '+' : ''}¥{(currentBalance.plBalance / 10000).toFixed(1)}万
-                </p>
-              </div>
-            </div>
-
-           
-
+            {/* 取引入力 */}
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className={`text-sm font-semibold ${theme.text} flex items-center gap-2 uppercase tracking-wide`}>
-                  <PlusCircle size={16} style={{ color: theme.accent }} />
-                  Add Transaction
-                </h2>
-                <button
-                  onClick={() => setShowCategoryModal(true)}
-                  className={`text-xs px-2 py-1 rounded-lg font-medium transition-all duration-200 hover-scale ${
-                    darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
-                  }`}
-                >
-                  + カテゴリ
-                </button>
-              </div>
-
-              <div className="space-y-3">
+              <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>取引を追加</h2>
+              <div className="space-y-2">
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => setNewTransaction({ ...newTransaction, type: 'expense', category: '' })}
-                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
-                      newTransaction.type === 'expense' ? 'scale-105 shadow-md' : 'hover-scale'
-                    }`}
-                    style={{
-                      backgroundColor: newTransaction.type === 'expense' ? theme.red : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                      color: newTransaction.type === 'expense' ? '#fff' : theme.textSecondary
-                    }}
-                  >
-                    支出
-                  </button>
-                  <button
-                    onClick={() => setNewTransaction({ ...newTransaction, type: 'income', category: '' })}
-                    className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
-                      newTransaction.type === 'income' ? 'scale-105 shadow-md' : 'hover-scale'
-                    }`}
-                    style={{
-                      backgroundColor: newTransaction.type === 'income' ? theme.green : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                      color: newTransaction.type === 'income' ? '#fff' : theme.textSecondary
-                    }}
-                  >
-                    収入
-                  </button>
+                  {[
+                    { type: 'expense', label: '支出', color: theme.red },
+                    { type: 'income', label: '収入', color: theme.green },
+                  ].map(({ type, label, color }) => (
+                    <button key={type}
+                      onClick={() => setNewTransaction({ ...newTransaction, type, paymentMethod: type === 'expense' ? 'credit' : undefined })}
+                      className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all duration-200`}
+                      style={{
+                        backgroundColor: newTransaction.type === type ? color : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                        color: newTransaction.type === type ? '#fff' : theme.textSecondary,
+                        transform: newTransaction.type === type ? 'scale(1.02)' : 'scale(1)',
+                      }}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
 
                 {newTransaction.type === 'expense' && (
                   <div className="flex gap-2">
-                    <button
-                      onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'credit' })}
-                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover-scale ${
-                        newTransaction.paymentMethod === 'credit'
-                          ? 'bg-orange-500 text-white'
-                          : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
-                      }`}
-                    >
-                      💳 クレジット
-                    </button>
-                    <button
-                      onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'cash' })}
-                      className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover-scale ${
-                        newTransaction.paymentMethod === 'cash'
-                          ? 'bg-green-500 text-white'
-                          : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
-                      }`}
-                    >
-                      💵 現金
-                    </button>
+                    {[
+                      { key: 'credit', label: '💳 クレジット' },
+                      { key: 'cash', label: '💵 現金' },
+                    ].map(({ key, label }) => (
+                      <button key={key}
+                        onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: key })}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200`}
+                        style={{
+                          backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#262626' : '#f0f0f0'),
+                          color: newTransaction.paymentMethod === key ? '#fff' : theme.textSecondary
+                        }}>
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 )}
 
-                <input
-                  type="date"
-                  value={newTransaction.date}
-                  onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-lg text-base appearance-none transition-all duration-200 ${
-                    darkMode 
-                      ? 'bg-neutral-800 text-white border border-neutral-700' 
-                      : 'bg-white border border-neutral-200'
-                  } focus:outline-none focus:border-blue-500`}
-                  style={{ colorScheme: darkMode ? 'dark' : 'light' }}
-                />
+                <div className="flex gap-2">
+                  <input type="date" value={newTransaction.date}
+                    onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
+                    className={`flex-1 px-3 py-2 rounded-xl text-sm appearance-none ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                    style={{ colorScheme: darkMode ? 'dark' : 'light' }} />
+                  <input type="text" inputMode="numeric" placeholder="金額"
+                    value={newTransaction.amount}
+                    onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value.replace(/[^0-9]/g, '') })}
+                    className={`flex-1 px-3 py-2 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                </div>
 
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  placeholder="金額"
-                  value={newTransaction.amount}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    setNewTransaction({ ...newTransaction, amount: value });
-                  }}
-                  className={`w-full px-3 py-2 rounded-lg text-base tabular-nums transition-all duration-200 focus:scale-105 ${
-                    darkMode 
-                      ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' 
-                      : 'bg-white border border-neutral-200 focus:border-blue-500'
-                  } focus:outline-none`}
-                />
-
-                <select
-                  value={newTransaction.category}
+                <select value={newTransaction.category}
                   onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-                    darkMode 
-                      ? 'bg-neutral-800 text-white border border-neutral-700' 
-                      : 'bg-white border border-neutral-200'
-                  } focus:outline-none focus:border-blue-500`}
-                >
+                  className={`w-full px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`}>
                   <option value="">カテゴリを選択</option>
                   {(newTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
 
-                <button
-                  onClick={addTransaction}
-                  className="w-full py-3 rounded-lg font-semibold text-white transition-all duration-200 hover-scale"
-                  style={{ backgroundColor: theme.accent }}
-                >
+                <button onClick={addTransaction}
+                  className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
+                  style={{ backgroundColor: theme.accent }}>
                   追加する
                 </button>
               </div>
             </div>
 
+            {/* 最近の取引 */}
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <div className="flex items-center justify-between mb-3">
-                <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</h2>
-                <button
-                  onClick={() => {
-                    setEditingRecurring(null);
-                    setShowRecurringModal(true);
-                  }}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold text-white transition-all duration-200 hover-scale"
-                  style={{ backgroundColor: theme.accent }}
-                >
-                  + 追加
-                </button>
+                <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>最近の取引</h2>
+                {!monthlyHistory[currentMonth] && currentBalance.cfBalance !== 0 && (
+                  <button
+                    onClick={() => {
+                      const cfBalance = currentBalance.cfBalance;
+                      const plannedTotal = simulationSettings.monthlyInvestment + simulationSettings.monthlySavings;
+                      setCloseMonthData(cfBalance >= plannedTotal
+                        ? { savedAmount: cfBalance - simulationSettings.monthlyInvestment, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
+                        : { savedAmount: 0, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
+                      );
+                      setShowCloseMonthModal(true);
+                    }}
+                    className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white hover-scale"
+                    style={{ backgroundColor: theme.accent }}>
+                    今月を締める
+                  </button>
+                )}
               </div>
-
-              {recurringTransactions.length === 0 ? (
-                <p className={`${theme.textSecondary} text-center py-3 text-sm`}>定期支払いを追加</p>
+              {transactions.length === 0 ? (
+                <p className={`text-sm text-center py-8 ${theme.textSecondary}`}>まだ取引がありません</p>
               ) : (
-                <div className="space-y-2">
-                  {recurringTransactions.map((recurring, idx) => (
-                    <div key={recurring.id} className={`flex items-center justify-between p-2 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg animate-fadeIn`} style={{ animationDelay: `${idx * 0.05}s` }}>
-                      <div className="flex items-center gap-2 flex-1">
-                        <span className="text-base">{recurring.type === 'investment' ? '📈' : '🔄'}</span>
-                        <div className="flex-1">
-                          <p className={`text-sm font-medium ${theme.text}`}>{recurring.name}</p>
-                          <p className={`text-xs ${theme.textSecondary}`}>毎月{recurring.day}日</p>
+                <div className="space-y-1">
+                  {transactions.slice(0, 10).map((t, idx) => (
+                    <div key={t.id} onClick={() => setEditingTransaction(t)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 hover-scale animate-fadeIn ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-50'}`}
+                      style={{ animationDelay: `${idx * 0.04}s` }}>
+                      <div className="flex items-center gap-2.5 flex-1">
+                        <span className="text-lg leading-none">
+                          {t.isRecurring && (t.isInvestment ? '📈' : '🔄')}
+                          {!t.isRecurring && (t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵'))}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${theme.text} truncate`}>{t.category}</p>
+                          <p className={`text-xs ${theme.textSecondary} tabular-nums`}>{t.date}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <p className={`text-sm font-bold tabular-nums ${theme.text}`}>
-                          ¥{recurring.amount.toLocaleString()}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {!t.settled && t.type === 'expense' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: theme.orange, color: '#000' }}>
+                            {t.isSettlement ? '引落' : t.paymentMethod === 'credit' ? '未確定' : '予定'}
+                          </span>
+                        )}
+                        {t.isInvestment && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>投資</span>
+                        )}
+                        <p className="text-sm font-bold tabular-nums" style={{ color: t.amount >= 0 ? theme.green : (t.isInvestment ? '#a855f7' : theme.red) }}>
+                          {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
                         </p>
-                        <button
-                          onClick={() => {
-                            setEditingRecurring(recurring);
-                            setShowRecurringModal(true);
-                          }}
-                          className="text-blue-500 transition-transform duration-200 hover:scale-110"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => deleteRecurring(recurring.id)}
-                          className="text-red-500 transition-transform duration-200 hover:scale-110"
-                        >
-                          🗑️
-                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
-
-            {calculateCategoryExpenses().length > 0 && (
-              <div className={`${theme.cardGlass} rounded-xl p-4 transition-all duration-200`}>
-                <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>今月の支出内訳（PL）</h2>
-                
-                <div className="space-y-2">
-                  {calculateCategoryExpenses().map((item, index) => {
-                    const total = calculateCategoryExpenses().reduce((sum, i) => sum + i.amount, 0);
-                    const percentage = (item.amount / total * 100).toFixed(1);
-                    const budgetData = budgetAnalysis.categoryComparison[item.category];
-                    
-                    return (
-                      <div key={item.category} className="animate-fadeIn" style={{ animationDelay: `${index * 0.05}s` }}>
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-sm ${theme.text} font-medium`}>{item.category}</span>
-                          <div className="flex items-center gap-2">
-                            {budgetData && (
-                              <span className={`text-xs px-2 py-0.5 rounded font-medium`} style={{
-                                backgroundColor: budgetData.difference <= 0 ? 'rgba(12, 214, 100, 0.2)' : 'rgba(255, 69, 58, 0.2)',
-                                color: budgetData.difference <= 0 ? theme.green : theme.red
-                              }}>
-                                {budgetData.percentage.toFixed(0)}%
-                              </span>
-                            )}
-                            <span className={`text-xs ${theme.textSecondary} tabular-nums`}>{percentage}%</span>
-                            <span className={`text-sm font-semibold ${theme.text} tabular-nums`}>
-                              ¥{item.amount.toLocaleString()}
-                            </span>
-                          </div>
-                        </div>
-                        <div className={`w-full ${darkMode ? 'bg-neutral-800' : 'bg-neutral-200'} rounded-full h-1.5 overflow-hidden`}>
-                          <div
-                            className="h-1.5 rounded-full transition-all duration-500"
-                            style={{ 
-                              width: `${percentage}%`,
-                              backgroundColor: budgetData && budgetData.difference > 0 ? theme.red : theme.green
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>最近の取引</h2>
-              <div className="space-y-1">
-                {transactions.slice(0, 8).map((t, idx) => (
-                  <div
-                    key={t.id}
-                    onClick={() => setEditingTransaction(t)}
-                    className={`flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all duration-200 hover-scale animate-fadeIn ${
-                      darkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-50'
-                    }`}
-                    style={{ animationDelay: `${idx * 0.05}s` }}
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      <span className="text-base">
-                        {t.isRecurring ? '🔄' : t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
-                      </span>
-                      <div className="flex-1">
-                        <p className={`text-sm font-medium ${theme.text}`}>{t.category}</p>
-                        <p className={`text-xs ${theme.textSecondary} tabular-nums`}>{t.date}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {!t.settled && t.type === 'expense' && (
-                        <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ backgroundColor: theme.orange, color: '#000' }}>
-                          {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
-                        </span>
-                      )}
-
-                      <p className={`text-sm font-bold tabular-nums`} style={{ color: t.amount >= 0 ? theme.green : theme.red }}>
-                        {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {!monthlyHistory[currentMonth] && currentBalance.cfBalance !== 0 && (
-                <button
-                  onClick={() => {
-                    const cfBalance = currentBalance.cfBalance;
-                    const plannedTotal = simulationSettings.monthlyInvestment + simulationSettings.monthlySavings;
-                    
-                    if (cfBalance >= plannedTotal) {
-                      setCloseMonthData({ 
-                        savedAmount: cfBalance - simulationSettings.monthlyInvestment, 
-                        investAmount: simulationSettings.monthlyInvestment, 
-                        dryPowderAmount: 0 
-                      });
-                    } else {
-                      setCloseMonthData({ 
-                        savedAmount: 0, 
-                        investAmount: simulationSettings.monthlyInvestment, 
-                        dryPowderAmount: 0 
-                      });
-                    }
-                    setShowCloseMonthModal(true);
-                  }}
-                  className="w-full mt-3 py-3 rounded-lg font-semibold text-white transition-all duration-200 hover-scale"
-                  style={{ backgroundColor: theme.accent }}
-                >
-                  今月を締める
-                </button>
-              )}
-            </div>
           </div>
         )}
+
         {activeTab === 'calendar' && (
           <div className="space-y-3 animate-fadeIn">
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
@@ -1921,41 +1580,235 @@ export default function BudgetSimulator() {
           </div>
         )}
 
-        {activeTab === 'simulation' && (
+        {activeTab === 'assets' && (
           <div className="space-y-3 animate-fadeIn">
+
+            {/* 総資産 */}
             <button
               onClick={() => setShowAssetEditModal(true)}
               className={`w-full ${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale text-left`}
             >
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs ${theme.textSecondary} font-medium uppercase tracking-wide`}>Current Assets</p>
-                <Edit2 size={14} className={theme.textSecondary} />
+              <div className="flex items-center justify-between mb-1">
+                <p className={`text-xs ${theme.textSecondary} font-medium uppercase tracking-wide`}>Total Assets</p>
+                <Edit2 size={13} className={theme.textSecondary} />
               </div>
-              <p className={`text-4xl font-bold ${theme.text} mb-3 tabular-nums tracking-tight`}>
-                ¥{((isNaN(assetData.savings) ? 0 : assetData.savings) + (isNaN(assetData.investments) ? 0 : assetData.investments) + (isNaN(assetData.nisa) ? 0 : (assetData.nisa || 0)) + (isNaN(assetData.dryPowder) ? 0 : (assetData.dryPowder || 0))).toLocaleString()}
+              <p className={`text-3xl font-bold ${theme.text} mb-3 tabular-nums tracking-tight`}>
+                ¥{((isNaN(assetData.savings)?0:assetData.savings)+(isNaN(assetData.investments)?0:assetData.investments)+(isNaN(assetData.nisa)?0:(assetData.nisa||0))+(isNaN(assetData.dryPowder)?0:(assetData.dryPowder||0))).toLocaleString()}
               </p>
-              <div className="grid grid-cols-4 gap-3">
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium`}>貯金</p>
-                  <p className={`text-base font-semibold ${theme.text} tabular-nums`}>¥{(assetData.savings / 10000).toFixed(0)}万</p>
-                </div>
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium`}>投資</p>
-                  <p className={`text-base font-semibold ${theme.text} tabular-nums`}>¥{(assetData.investments / 10000).toFixed(0)}万</p>
-                </div>
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium`}>NISA</p>
-                  <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.green }}>¥{((assetData.nisa || 0) / 10000).toFixed(0)}万</p>
-                </div>
-                <div>
-                  <p className={`text-xs ${theme.textSecondary} font-medium flex items-center gap-1`}>
-                    <Droplets size={10} style={{ color: theme.accent }} />
-                    待機
-                  </p>
-                  <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.accent }}>¥{((assetData.dryPowder || 0) / 10000).toFixed(0)}万</p>
-                </div>
+              {(() => {
+                const total = (isNaN(assetData.savings)?0:assetData.savings)+(isNaN(assetData.investments)?0:assetData.investments)+(isNaN(assetData.nisa)?0:(assetData.nisa||0))+(isNaN(assetData.dryPowder)?0:(assetData.dryPowder||0));
+                if (total === 0) return null;
+                return (
+                  <div className="w-full h-2 rounded-full overflow-hidden flex mb-3">
+                    <div style={{ width: `${(isNaN(assetData.savings)?0:assetData.savings)/total*100}%`, backgroundColor: '#3b82f6' }}></div>
+                    <div style={{ width: `${(isNaN(assetData.investments)?0:assetData.investments)/total*100}%`, backgroundColor: '#a855f7' }}></div>
+                    <div style={{ width: `${(isNaN(assetData.nisa)?0:(assetData.nisa||0))/total*100}%`, backgroundColor: theme.green }}></div>
+                    <div style={{ width: `${(isNaN(assetData.dryPowder)?0:(assetData.dryPowder||0))/total*100}%`, backgroundColor: theme.accent }}></div>
+                  </div>
+                );
+              })()}
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: '現預金', value: isNaN(assetData.savings)?0:assetData.savings, color: '#3b82f6' },
+                  { label: '投資', value: isNaN(assetData.investments)?0:assetData.investments, color: '#a855f7' },
+                  { label: 'NISA', value: isNaN(assetData.nisa)?0:(assetData.nisa||0), color: theme.green },
+                  { label: '待機', value: isNaN(assetData.dryPowder)?0:(assetData.dryPowder||0), color: theme.accent },
+                ].map(({ label, value, color }) => (
+                  <div key={label}>
+                    <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>{label}</p>
+                    <p className="text-sm font-bold tabular-nums" style={{ color }}>¥{(value/10000).toFixed(0)}万</p>
+                  </div>
+                ))}
               </div>
             </button>
+
+            {/* 投資実行 */}
+            <button
+              onClick={() => setShowInvestModal(true)}
+              className={`w-full ${theme.cardGlass} rounded-xl p-3.5 transition-all duration-200 hover-scale text-left`}
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-[10px] ${theme.textSecondary} mb-0.5 uppercase tracking-wide font-medium`}>振替・投資実行</p>
+                  <p className={`text-sm font-semibold ${theme.text}`}>現預金・待機資金 → 投資口座</p>
+                </div>
+                <div className="text-2xl">📈</div>
+              </div>
+            </button>
+
+            {/* 同世代比較 */}
+            <button
+              onClick={() => setShowBenchmark(true)}
+              className={`w-full ${theme.cardGlass} rounded-xl p-3.5 transition-all duration-200 hover-scale text-left`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className={`text-[10px] ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>
+                    同世代比較（{getAgeGroup()==='20s'?'20代':getAgeGroup()==='30s'?'30代':getAgeGroup()==='40s'?'40代':getAgeGroup()==='50s'?'50代':'60代以上'}）
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-xl font-bold tabular-nums" style={{ color: calculateBenchmark().isAboveAverage ? theme.green : theme.red }}>
+                      {calculateBenchmark().isAboveAverage?'+':''}{(calculateBenchmark().difference/10000).toFixed(0)}万円
+                    </p>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{
+                      backgroundColor: calculateBenchmark().isAboveAverage ? 'rgba(12,214,100,0.15)' : 'rgba(255,69,58,0.15)',
+                      color: calculateBenchmark().isAboveAverage ? theme.green : theme.red
+                    }}>
+                      上位{(100-calculateBenchmark().percentile).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+                <div className="text-2xl ml-2">📊</div>
+              </div>
+            </button>
+
+            {/* 今月の収支 */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>今月の収支</h2>
+                <button
+                  onClick={() => setShowBudgetModal(true)}
+                  className={`text-xs px-2.5 py-1 rounded-lg font-medium ${darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-500'}`}
+                >
+                  予算設定
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3`}>
+                  <p className={`text-xs ${theme.textSecondary} mb-1`}>収入 (PL)</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: theme.green }}>¥{(budgetAnalysis.income.actual/10000).toFixed(1)}万</p>
+                  <p className={`text-xs ${theme.textSecondary} tabular-nums`}>予算 ¥{(budgetAnalysis.income.budgeted/10000).toFixed(0)}万</p>
+                </div>
+                <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3`}>
+                  <p className={`text-xs ${theme.textSecondary} mb-1`}>支出 (PL)</p>
+                  <p className="text-lg font-bold tabular-nums" style={{ color: budgetAnalysis.expense.difference<=0?theme.green:theme.red }}>
+                    ¥{(budgetAnalysis.expense.actual/10000).toFixed(1)}万
+                  </p>
+                  <p className={`text-xs ${theme.textSecondary} tabular-nums`}>予算 ¥{(budgetAnalysis.expense.budgeted/10000).toFixed(0)}万</p>
+                </div>
+              </div>
+              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3 space-y-1.5`}>
+                <div className="flex justify-between items-center">
+                  <span className={`text-xs ${theme.textSecondary}`}>PL残高（発生ベース）</span>
+                  <span className="text-sm font-bold tabular-nums" style={{ color: currentBalance.plBalance>=0?theme.green:theme.red }}>
+                    {currentBalance.plBalance>=0?'+':''}¥{currentBalance.plBalance.toLocaleString()}
+                  </span>
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className={`text-xs ${theme.textSecondary}`}>CF残高（現金ベース）</span>
+                  <span className="text-sm font-bold tabular-nums" style={{ color: currentBalance.cfBalance>=0?theme.green:theme.red }}>
+                    {currentBalance.cfBalance>=0?'+':''}¥{currentBalance.cfBalance.toLocaleString()}
+                  </span>
+                </div>
+                {currentBalance.investmentTransfer > 0 && (
+                  <div className="flex justify-between items-center pt-1" style={{ borderTop: `1px solid ${darkMode?'#2C2C2E':'#e5e7eb'}` }}>
+                    <span className={`text-xs ${theme.textSecondary}`}>📈 投資積立（除外済）</span>
+                    <span className="text-xs font-bold tabular-nums" style={{ color: '#a855f7' }}>¥{currentBalance.investmentTransfer.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+              {!monthlyHistory[currentMonth] && currentBalance.cfBalance !== 0 && (
+                <button
+                  onClick={() => {
+                    const cfBalance = currentBalance.cfBalance;
+                    const plannedTotal = simulationSettings.monthlyInvestment + simulationSettings.monthlySavings;
+                    setCloseMonthData(cfBalance >= plannedTotal
+                      ? { savedAmount: cfBalance - simulationSettings.monthlyInvestment, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
+                      : { savedAmount: 0, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
+                    );
+                    setShowCloseMonthModal(true);
+                  }}
+                  className="w-full mt-3 py-2.5 rounded-xl font-semibold text-white transition-all hover-scale"
+                  style={{ backgroundColor: theme.accent }}
+                >
+                  今月を締める
+                </button>
+              )}
+            </div>
+
+            {/* 支出内訳（投資除外） */}
+            {(() => {
+              const investIds = new Set(recurringTransactions.filter(r => r.type==='investment'||r.type==='fund').map(r => r.id));
+              const catMap = transactions
+                .filter(t => t.date.startsWith(currentMonth) && t.amount < 0 && !t.isSettlement && !(t.recurringId && investIds.has(t.recurringId)) && !t.isInvestment)
+                .reduce((acc, t) => { acc[t.category] = (acc[t.category]||0) + Math.abs(t.amount); return acc; }, {});
+              const items = Object.entries(catMap).map(([category, amount]) => ({ category, amount })).sort((a,b) => b.amount - a.amount);
+              const total = items.reduce((s, i) => s + i.amount, 0);
+              if (items.length === 0) return null;
+              return (
+                <div className={`${theme.cardGlass} rounded-xl p-4`}>
+                  <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>今月の支出内訳</h2>
+                  <div className="space-y-2.5">
+                    {items.map((item, idx) => {
+                      const pct = item.amount / total * 100;
+                      const bd = budgetAnalysis.categoryComparison[item.category];
+                      return (
+                        <div key={item.category} className="animate-fadeIn" style={{ animationDelay: `${idx*0.04}s` }}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-xs font-medium ${theme.text}`}>{item.category}</span>
+                            <div className="flex items-center gap-2">
+                              {bd && bd.budgeted > 0 && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold" style={{
+                                  backgroundColor: bd.difference<=0?'rgba(12,214,100,0.15)':'rgba(255,69,58,0.15)',
+                                  color: bd.difference<=0?theme.green:theme.red
+                                }}>{bd.percentage.toFixed(0)}%</span>
+                              )}
+                              <span className={`text-xs font-semibold ${theme.text} tabular-nums`}>¥{item.amount.toLocaleString()}</span>
+                            </div>
+                          </div>
+                          <div className={`w-full ${darkMode?'bg-neutral-800':'bg-neutral-200'} rounded-full h-1.5 overflow-hidden`}>
+                            <div className="h-1.5 rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%`, backgroundColor: bd&&bd.difference>0?theme.red:theme.accent }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* 定期支払い */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</h2>
+                <button onClick={() => { setEditingRecurring(null); setShowRecurringModal(true); }}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold text-white hover-scale"
+                  style={{ backgroundColor: theme.accent }}>+ 追加</button>
+              </div>
+              {recurringTransactions.length === 0 ? (
+                <p className={`text-sm text-center py-4 ${theme.textSecondary}`}>定期支払いを追加してください</p>
+              ) : (
+                <div className="space-y-2">
+                  {recurringTransactions.map((r, idx) => (
+                    <div key={r.id} className={`flex items-center p-2.5 ${darkMode?'bg-neutral-800':'bg-neutral-50'} rounded-xl`}>
+                      <span className="text-base mr-2.5">{r.type==='investment'||r.type==='fund'?'📈':'🔄'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${theme.text} truncate`}>{r.name}</p>
+                        <p className={`text-xs ${theme.textSecondary}`}>
+                          毎月{r.day}日
+                          {(r.type==='investment'||r.type==='fund') && (
+                            <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>投資</span>
+                          )}
+                        </p>
+                      </div>
+                      <p className="text-sm font-bold tabular-nums mr-2" style={{ color: r.type==='investment'||r.type==='fund'?'#a855f7':undefined }}>
+                        ¥{r.amount.toLocaleString()}
+                      </p>
+                      <button onClick={() => { setEditingRecurring(r); setShowRecurringModal(true); }} className="p-1 text-blue-500 hover:scale-110 transition-transform">✏️</button>
+                      <button onClick={() => deleteRecurring(r.id)} className="p-1 text-red-500 hover:scale-110 transition-transform">🗑️</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {activeTab === 'simulation' && (
+          <div className="space-y-3 animate-fadeIn">
+
 
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide flex items-center gap-2`}>
@@ -3614,155 +3467,119 @@ export default function BudgetSimulator() {
       )}
 
       {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[80vh] overflow-y-auto`}>
-            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>設定</h2>
-            
-            <div className="space-y-4">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-end justify-center p-0 z-50 animate-fadeIn" onClick={() => setShowSettings(false)}>
+          <div className={`${theme.cardGlass} rounded-t-3xl w-full max-w-md max-h-[85vh] overflow-y-auto animate-slideUp`} onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 flex items-center justify-between px-6 pt-5 pb-3" style={{ backgroundColor: 'inherit' }}>
+              <h2 className={`text-xl font-bold ${theme.text}`}>設定</h2>
+              <button onClick={() => setShowSettings(false)} className={`w-8 h-8 flex items-center justify-center rounded-full ${darkMode ? 'bg-neutral-800' : 'bg-neutral-100'} ${theme.text}`}>✕</button>
+            </div>
+            <div className="px-6 pb-8 space-y-6">
+
+              {/* プロフィール */}
               <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>お名前</label>
-                <input
-                  type="text"
-                  value={userInfo?.name || ''}
-                  onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-lg ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
-                  }`}
-                />
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>年齢</label>
-                <input
-                  type="number"
-                  value={userInfo?.age || ''}
-                  onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-lg ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
-                  }`}
-                />
-              </div>
-
-              <div className="border-t pt-4" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
-                <h3 className={`text-sm font-semibold ${theme.text} mb-3`}>データのインポート</h3>
-                <p className={`text-xs ${theme.textSecondary} mb-3`}>
-                  他の家計簿アプリからCSVファイルをインポートできます
-                </p>
-                
-                <input
-                  type="file"
-                  accept=".csv,.json"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-
-                    const reader = new FileReader();
-                    reader.onload = (event) => {
-                      try {
-                        const content = event.target.result;
-                        
-                        if (file.name.endsWith('.json')) {
-                          const data = JSON.parse(content);
-                          if (data.transactions) setTransactions(data.transactions);
-                          if (data.assetData) setAssetData(data.assetData);
-                          alert('インポートが完了しました！');
-                        } else if (file.name.endsWith('.csv')) {
-                          const lines = content.split('\n');
-                          const imported = [];
-                          
-                          for (let i = 1; i < lines.length; i++) {
-                            const line = lines[i].trim();
-                            if (!line) continue;
-                            
-                            const [date, category, amount, type] = line.split(',');
-                            if (!date || !category || !amount) continue;
-                            
-                            imported.push({
-                              id: Date.now() + i,
-                              date: date.trim(),
-                              category: category.trim(),
-                              amount: parseFloat(amount.trim()),
-                              type: type?.trim() === 'income' ? 'income' : 'expense',
-                              settled: true
-                            });
-                          }
-                          
-                          if (imported.length > 0) {
-                            setTransactions([...imported, ...transactions]);
-                            alert(`${imported.length}件の取引をインポートしました！`);
-                          }
-                        }
-                      } catch (error) {
-                        alert('ファイルの読み込みに失敗しました: ' + error.message);
-                      }
-                    };
-                    reader.readAsText(file);
-                  }}
-                  className={`w-full px-4 py-2 rounded-lg text-sm ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
-                  }`}
-                />
-                
-                <details className="mt-3">
-                  <summary className={`text-xs ${theme.textSecondary} cursor-pointer hover:underline`}>
-                    CSVフォーマット例
-                  </summary>
-                  <div className={`mt-2 p-2 rounded text-xs ${darkMode ? 'bg-neutral-800' : 'bg-neutral-100'}`}>
-                    <code className={theme.text}>
-                      date,category,amount,type<br/>
-                      2026-02-01,食費,-1200,expense<br/>
-                      2026-02-05,給料,250000,income<br/>
-                      2026-02-10,交通費,-500,expense
-                    </code>
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>プロフィール</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>名前</label>
+                    <input type="text" value={userInfo?.name || ''} onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
                   </div>
-                </details>
+                  <div>
+                    <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>年齢</label>
+                    <input type="number" value={userInfo?.age || ''} onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                  </div>
+                </div>
+              </div>
 
-                <button
-                  onClick={() => {
-                    const exportData = {
-                      transactions,
-                      assetData,
-                      userInfo,
-                      monthlyHistory,
-                      lifeEvents,
-                      monthlyBudget,
-                      customCategories,
-                      recurringTransactions,
-                      exportDate: new Date().toISOString()
-                    };
-                    
-                    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+              {/* カテゴリ管理 */}
+              <div>
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>カテゴリ管理</p>
+                <div className="flex gap-2 mb-3">
+                  {['expense', 'income'].map(type => (
+                    <button key={type} onClick={() => setNewCategoryType(type)}
+                      className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all`}
+                      style={{
+                        backgroundColor: newCategoryType === type ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                        color: newCategoryType === type ? '#fff' : theme.textSecondary
+                      }}>
+                      {type === 'expense' ? '支出カテゴリ' : '収入カテゴリ'}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2 mb-2">
+                  <input type="text" placeholder="新しいカテゴリ名" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)}
+                    className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                  <button onClick={addCustomCategory}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+                    style={{ backgroundColor: theme.accent }}>追加</button>
+                </div>
+                {customCategories[newCategoryType].length > 0 && (
+                  <div className="space-y-1.5 mt-2">
+                    {customCategories[newCategoryType].map(cat => (
+                      <div key={cat} className={`flex items-center justify-between px-3 py-2 rounded-xl ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
+                        <span className={`text-sm ${theme.text}`}>{cat}</span>
+                        <button onClick={() => deleteCustomCategory(cat, newCategoryType)} className="text-red-400 hover:scale-110 transition-transform text-lg">🗑️</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* データ管理 */}
+              <div>
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>データ管理</p>
+                <div className="space-y-2">
+                  <label className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium border-2 cursor-pointer transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}>
+                    <input type="file" accept=".csv,.json" className="hidden" onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        try {
+                          const rawContent = event.target.result;
+                          if (file.name.endsWith('.json')) {
+                            const data = JSON.parse(rawContent);
+                            if (data.transactions) setTransactions(data.transactions);
+                            if (data.assetData) setAssetData(data.assetData);
+                            alert('インポートが完了しました！');
+                          } else if (file.name.endsWith('.csv')) {
+                            const lines = rawContent.split('
+');
+                            const imported = [];
+                            for (let i = 1; i < lines.length; i++) {
+                              const line = lines[i].trim();
+                              if (!line) continue;
+                              const [date, category, amount, type] = line.split(',');
+                              if (!date || !category || !amount) continue;
+                              imported.push({ id: Date.now() + i, date: date.trim(), category: category.trim(), amount: parseFloat(amount.trim()), type: type?.trim() === 'income' ? 'income' : 'expense', settled: true });
+                            }
+                            if (imported.length > 0) { setTransactions([...imported, ...transactions]); alert(`${imported.length}件インポートしました！`); }
+                          }
+                        } catch(err) { alert('インポートに失敗しました'); }
+                      };
+                      reader.readAsText(file);
+                    }}>
+                    📁 CSVをインポート
+                  </label>
+                  <button onClick={() => {
+                    const data = JSON.stringify({ transactions, assetData, monthlyBudget, recurringTransactions, lifeEvents, simulationSettings }, null, 2);
+                    const blob = new Blob([data], { type: 'application/json' });
                     const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `money-planner-backup-${new Date().toISOString().slice(0, 10)}.json`;
-                    a.click();
+                    const a = document.createElement('a'); a.href = url; a.download = 'money_planner_backup.json'; a.click();
                     URL.revokeObjectURL(url);
                   }}
-                  className={`w-full mt-3 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 hover-scale ${
-                    darkMode ? 'bg-neutral-800 text-white' : 'bg-neutral-100 text-neutral-700'
-                  }`}
-                >
-                  📥 データをエクスポート
-                </button>
+                  className={`w-full py-3 rounded-xl text-sm font-medium border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}>
+                    💾 データをバックアップ
+                  </button>
+                  <button onClick={resetAllData}
+                    className="w-full py-3 rounded-xl text-sm font-semibold text-red-500 border-2 border-red-500 border-opacity-30 transition-all hover-scale">
+                    🗑️ 全データをリセット
+                  </button>
+                </div>
               </div>
 
-              <button
-                onClick={resetAllData}
-                className="w-full px-4 py-3 rounded-xl font-bold text-white"
-                style={{ backgroundColor: theme.red }}
-              >
-                全データを削除
-              </button>
             </div>
-
-            <button
-              onClick={() => setShowSettings(false)}
-              className="w-full mt-4 px-4 py-3 rounded-xl font-bold"
-              style={{ backgroundColor: theme.accent, color: 'white' }}
-            >
-              閉じる
-            </button>
           </div>
         </div>
       )}
@@ -3989,38 +3806,28 @@ export default function BudgetSimulator() {
         </div>
       )}
 
-      <div className={`fixed bottom-0 left-0 right-0 ${darkMode ? 'bg-neutral-900' : 'bg-white'} border-t ${theme.border} transition-colors duration-300`}>
+      <div className={`fixed bottom-0 left-0 right-0 ${darkMode ? 'bg-neutral-900' : 'bg-white'} border-t ${theme.border} transition-colors duration-300`} style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
         <div className="max-w-md mx-auto flex">
-          <button
-            onClick={() => setActiveTab('home')}
-            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all duration-200 ${
-              activeTab === 'home' ? 'scale-110' : 'hover:scale-105'
-            }`}
-            style={{ color: activeTab === 'home' ? theme.accent : theme.textSecondary }}
-          >
-            <DollarSign size={22} />
-            <span className="text-xs font-medium">家計簿</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('calendar')}
-            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all duration-200 ${
-              activeTab === 'calendar' ? 'scale-110' : 'hover:scale-105'
-            }`}
-            style={{ color: activeTab === 'calendar' ? theme.accent : theme.textSecondary }}
-          >
-            <Calendar size={22} />
-            <span className="text-xs font-medium">履歴</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('simulation')}
-            className={`flex-1 py-3 flex flex-col items-center gap-1 transition-all duration-200 ${
-              activeTab === 'simulation' ? 'scale-110' : 'hover:scale-105'
-            }`}
-            style={{ color: activeTab === 'simulation' ? theme.accent : theme.textSecondary }}
-          >
-            <TrendingUp size={22} />
-            <span className="text-xs font-medium">シミュレーション</span>
-          </button>
+          {[
+            { id: 'home', icon: <DollarSign size={20} />, label: '家計簿' },
+            { id: 'assets', icon: <Droplets size={20} />, label: '資産' },
+            { id: 'calendar', icon: <Calendar size={20} />, label: '履歴' },
+            { id: 'simulation', icon: <TrendingUp size={20} />, label: 'シミュ' },
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex-1 py-2 flex flex-col items-center gap-0.5 transition-all duration-200 ${
+                activeTab === tab.id ? 'scale-110' : 'hover:scale-105'
+              }`}
+              style={{ color: activeTab === tab.id ? theme.accent : theme.textSecondary }}
+            >
+              <div className={`p-1.5 rounded-xl transition-all duration-200 ${activeTab === tab.id ? (darkMode ? 'bg-neutral-800' : 'bg-blue-50') : ''}`}>
+                {tab.icon}
+              </div>
+              <span className={`text-[10px] font-semibold`}>{tab.label}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
