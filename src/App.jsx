@@ -184,6 +184,8 @@ export default function BudgetSimulator() {
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [showLifeEventModal, setShowLifeEventModal] = useState(false);
   const [editingLifeEvent, setEditingLifeEvent] = useState(null);
+  const [showInvestModal, setShowInvestModal] = useState(false);
+  const [investForm, setInvestForm] = useState({ fromSource: 'savings', amount: '', targetAccount: 'investments' });
 
   useEffect(() => {
     saveToStorage('transactions', transactions);
@@ -237,7 +239,7 @@ export default function BudgetSimulator() {
     const isModalOpen = showRecurringModal || showCategoryModal || showBudgetModal || 
                         showAssetEditModal || showDateTransactionsModal || showBenchmark ||
                         showLifeEventModal || showSettings || showOnboarding || 
-                        showCloseMonthModal || editingTransaction;
+                        showCloseMonthModal || editingTransaction || showInvestModal;
     
     if (isModalOpen) {
       document.body.style.overflow = 'hidden';
@@ -251,7 +253,7 @@ export default function BudgetSimulator() {
     };
   }, [showRecurringModal, showCategoryModal, showBudgetModal, showAssetEditModal, 
       showDateTransactionsModal, showBenchmark, showLifeEventModal, showSettings, 
-      showOnboarding, showCloseMonthModal, editingTransaction]);
+      showOnboarding, showCloseMonthModal, editingTransaction, showInvestModal]);
 
 
   const expenseCategories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他', ...customCategories.expense];
@@ -314,7 +316,13 @@ export default function BudgetSimulator() {
     const ageGroup = getAgeGroup(targetAge);
     const benchmark = benchmarkData[ageGroup];
     
-    const myTotal = assetData.savings + assetData.investments + assetData.nisa + assetData.dryPowder;
+    // NaN/undefinedを0として安全に計算
+    const safeSavings = isNaN(Number(assetData.savings)) ? 0 : Number(assetData.savings);
+    const safeInvestments = isNaN(Number(assetData.investments)) ? 0 : Number(assetData.investments);
+    const safeNisa = isNaN(Number(assetData.nisa)) ? 0 : Number(assetData.nisa);
+    const safeDryPowder = isNaN(Number(assetData.dryPowder)) ? 0 : Number(assetData.dryPowder);
+    
+    const myTotal = safeSavings + safeInvestments + safeNisa + safeDryPowder;
     const avgTotal = benchmark.average;
     const medianTotal = benchmark.median;
     const difference = myTotal - avgTotal;
@@ -329,7 +337,7 @@ export default function BudgetSimulator() {
       avgTotal,
       medianTotal,
       difference,
-      percentile: Math.max(0.1, Math.min(99.9, percentile)),
+      percentile: Math.max(0.1, Math.min(99.9, isNaN(percentile) ? 0 : percentile)),
       isAboveAverage: difference >= 0,
       isAboveMedian: myTotal >= medianTotal,
       ageGroup,
@@ -431,17 +439,20 @@ export default function BudgetSimulator() {
         if (!exists) {
           const isPast = new Date(targetDate) <= today;
           
+          const isInvestType = recurring.type === 'investment' || recurring.type === 'fund';
           const newTransaction = {
             id: Date.now() + Math.random(),
             date: targetDate,
             category: recurring.category,
             amount: -recurring.amount,
-            type: recurring.type === 'investment' ? 'expense' : 'expense',
+            type: 'expense',
             paymentMethod: recurring.paymentMethod,
             settled: recurring.paymentMethod === 'cash' ? isPast : false,
             isRecurring: true,
             recurringId: recurring.id,
-            recurringName: recurring.name
+            recurringName: recurring.name,
+            isInvestment: isInvestType,
+            investTarget: recurring.type === 'fund' ? 'fund' : 'investments'
           };
           
           setTransactions(prev => [newTransaction, ...prev]);
@@ -518,27 +529,39 @@ export default function BudgetSimulator() {
       t.date.startsWith(yearMonth)
     );
     
-    // PL（発生主義）：クレジット引き落としを除く全取引
+    // 投資積立タイプの定期支払いIDセット（支出から除外し資産に計上）
+    const investingRecurringIds = new Set(
+      recurringTransactions
+        .filter(r => r.type === 'investment' || r.type === 'fund')
+        .map(r => r.id)
+    );
+    
+    // PL（発生主義）：クレジット引き落とし・投資積立を除く全取引
     const plIncome = monthTransactions
       .filter(t => t.amount > 0 && !t.isSettlement)
       .reduce((sum, t) => sum + t.amount, 0);
     
     const plExpense = Math.abs(monthTransactions
-      .filter(t => t.amount < 0 && !t.isSettlement)
+      .filter(t => t.amount < 0 && !t.isSettlement && !investingRecurringIds.has(t.recurringId))
       .reduce((sum, t) => sum + t.amount, 0));
     
-    // CF（現金主義）：確定済み取引のみ
+    // 投資積立（定期）：支出ではなく資産振替としてカウント
+    const investmentTransfer = Math.abs(monthTransactions
+      .filter(t => t.amount < 0 && t.recurringId && investingRecurringIds.has(t.recurringId))
+      .reduce((sum, t) => sum + t.amount, 0));
+    
+    // CF（現金主義）：確定済み取引のみ（投資積立除く）
     const cfIncome = monthTransactions
       .filter(t => t.amount > 0 && t.settled)
       .reduce((sum, t) => sum + t.amount, 0);
     
     const cfExpense = Math.abs(monthTransactions
-      .filter(t => t.amount < 0 && t.settled)
+      .filter(t => t.amount < 0 && t.settled && !investingRecurringIds.has(t.recurringId))
       .reduce((sum, t) => sum + t.amount, 0));
     
     // 未確定のクレジット（翌月以降のCF）
     const unsettledCredit = Math.abs(monthTransactions
-      .filter(t => t.amount < 0 && !t.settled && t.paymentMethod === 'credit' && !t.isSettlement)
+      .filter(t => t.amount < 0 && !t.settled && t.paymentMethod === 'credit' && !t.isSettlement && !investingRecurringIds.has(t.recurringId))
       .reduce((sum, t) => sum + t.amount, 0));
     
     return {
@@ -548,7 +571,8 @@ export default function BudgetSimulator() {
       cfIncome,
       cfExpense,
       cfBalance: cfIncome - cfExpense,
-      unsettledCredit
+      unsettledCredit,
+      investmentTransfer
     };
   };
 
@@ -674,14 +698,14 @@ export default function BudgetSimulator() {
 
 
   const closeMonth = () => {
-    const cfBalance = currentBalance.cfBalance;
+    const cfBalance = isNaN(currentBalance.cfBalance) ? 0 : currentBalance.cfBalance;
     const plannedInvestment = simulationSettings.monthlyInvestment;
     const plannedSavings = simulationSettings.monthlySavings;
     const totalPlanned = plannedInvestment + plannedSavings;
     
-    let actualInvest = closeMonthData.investAmount;
-    let actualDryPowder = closeMonthData.dryPowderAmount;
-    let actualSavings = closeMonthData.savedAmount;
+    let actualInvest = isNaN(closeMonthData.investAmount) ? 0 : closeMonthData.investAmount;
+    let actualDryPowder = isNaN(closeMonthData.dryPowderAmount) ? 0 : closeMonthData.dryPowderAmount;
+    let actualSavings = isNaN(closeMonthData.savedAmount) ? 0 : closeMonthData.savedAmount;
     let withdrawalFromSavings = 0;
     
     if (cfBalance < totalPlanned) {
@@ -690,12 +714,41 @@ export default function BudgetSimulator() {
       actualSavings = cfBalance - actualDryPowder;
     }
 
-    setAssetData(prev => ({
-      savings: prev.savings + actualSavings - withdrawalFromSavings,
-      investments: prev.investments + actualInvest,
-      dryPowder: prev.dryPowder + actualDryPowder,
-      nisa: prev.nisa
-    }));
+    // 今月の定期投資（確定済み）を自動的に資産に反映
+    const recurringInvestIds = new Set(
+      recurringTransactions
+        .filter(r => r.type === 'investment' || r.type === 'fund')
+        .map(r => r.id)
+    );
+    const currentMonthStr = new Date().toISOString().slice(0, 7);
+    const settledInvestments = transactions.filter(t =>
+      t.date.startsWith(currentMonthStr) && t.settled && t.recurringId && recurringInvestIds.has(t.recurringId)
+    );
+    const autoInvestAmount = settledInvestments
+      .filter(t => {
+        const r = recurringTransactions.find(r => r.id === t.recurringId);
+        return r && r.type === 'investment';
+      })
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const autoFundAmount = settledInvestments
+      .filter(t => {
+        const r = recurringTransactions.find(r => r.id === t.recurringId);
+        return r && r.type === 'fund';
+      })
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
+    setAssetData(prev => {
+      const prevSavings = isNaN(Number(prev.savings)) ? 0 : Number(prev.savings);
+      const prevInvestments = isNaN(Number(prev.investments)) ? 0 : Number(prev.investments);
+      const prevDryPowder = isNaN(Number(prev.dryPowder)) ? 0 : Number(prev.dryPowder);
+      const prevNisa = isNaN(Number(prev.nisa)) ? 0 : Number(prev.nisa);
+      return {
+        savings: prevSavings + actualSavings - withdrawalFromSavings,
+        investments: prevInvestments + actualInvest + autoInvestAmount,
+        dryPowder: prevDryPowder + actualDryPowder,
+        nisa: prevNisa + autoFundAmount
+      };
+    });
 
     setMonthlyHistory(prev => ({
       ...prev,
@@ -799,6 +852,41 @@ export default function BudgetSimulator() {
     if (!confirm('この定期支払いを削除しますか？')) return;
     setRecurringTransactions(recurringTransactions.filter(r => r.id !== id));
   };
+
+  // 投資実行：現預金または待機資金から投資口座に資金を移動
+  const executeInvestment = () => {
+    const amount = Number(investForm.amount);
+    if (!amount || amount <= 0) {
+      alert('金額を入力してください');
+      return;
+    }
+    const sourceBalance = investForm.fromSource === 'savings' 
+      ? (isNaN(assetData.savings) ? 0 : assetData.savings)
+      : (isNaN(assetData.dryPowder) ? 0 : (assetData.dryPowder || 0));
+    if (amount > sourceBalance) {
+      alert('残高が不足しています');
+      return;
+    }
+    setAssetData(prev => {
+      const newData = { ...prev };
+      if (investForm.fromSource === 'savings') {
+        newData.savings = (isNaN(prev.savings) ? 0 : prev.savings) - amount;
+      } else {
+        newData.dryPowder = (isNaN(prev.dryPowder) ? 0 : (prev.dryPowder || 0)) - amount;
+      }
+      if (investForm.targetAccount === 'investments') {
+        newData.investments = (isNaN(prev.investments) ? 0 : prev.investments) + amount;
+      } else if (investForm.targetAccount === 'nisa') {
+        newData.nisa = (isNaN(prev.nisa) ? 0 : (prev.nisa || 0)) + amount;
+      } else {
+        newData.dryPowder = (isNaN(prev.dryPowder) ? 0 : (prev.dryPowder || 0)) + amount;
+      }
+      return newData;
+    });
+    setInvestForm({ fromSource: 'savings', amount: '', targetAccount: 'investments' });
+    setShowInvestModal(false);
+  };
+
   const runMonteCarloSimulation = (numSimulations = 100) => {
     const { years, monthlyInvestment, monthlySavings, savingsInterestRate, returnRate, useNisa, useLumpSum, lumpSumAmount, lumpSumMonths, riskProfile } = simulationSettings;
     
@@ -1210,7 +1298,7 @@ export default function BudgetSimulator() {
                 <Edit2 size={14} className={theme.textSecondary} />
               </div>
               <p className={`text-4xl font-bold ${theme.text} mb-3 tabular-nums tracking-tight`}>
-                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0) + (assetData.dryPowder || 0)).toLocaleString()}
+                ¥{((isNaN(assetData.savings) ? 0 : assetData.savings) + (isNaN(assetData.investments) ? 0 : assetData.investments) + (isNaN(assetData.nisa) ? 0 : (assetData.nisa || 0)) + (isNaN(assetData.dryPowder) ? 0 : (assetData.dryPowder || 0))).toLocaleString()}
               </p>
               <div className="grid grid-cols-4 gap-3">
                 <div>
@@ -1232,6 +1320,19 @@ export default function BudgetSimulator() {
                   </p>
                   <p className={`text-base font-semibold tabular-nums`} style={{ color: theme.accent }}>¥{((assetData.dryPowder || 0) / 10000).toFixed(0)}万</p>
                 </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setShowInvestModal(true)}
+              className={`w-full ${theme.cardGlass} rounded-xl p-4 transition-all duration-200 hover-scale text-left`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <p className={`text-xs ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>投資を実行する</p>
+                  <p className={`text-sm font-semibold ${theme.text}`}>現預金・待機資金 → 投資口座に振替</p>
+                </div>
+                <div className="text-3xl">📈</div>
               </div>
             </button>
 
@@ -1831,7 +1932,7 @@ export default function BudgetSimulator() {
                 <Edit2 size={14} className={theme.textSecondary} />
               </div>
               <p className={`text-4xl font-bold ${theme.text} mb-3 tabular-nums tracking-tight`}>
-                ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0) + (assetData.dryPowder || 0)).toLocaleString()}
+                ¥{((isNaN(assetData.savings) ? 0 : assetData.savings) + (isNaN(assetData.investments) ? 0 : assetData.investments) + (isNaN(assetData.nisa) ? 0 : (assetData.nisa || 0)) + (isNaN(assetData.dryPowder) ? 0 : (assetData.dryPowder || 0))).toLocaleString()}
               </p>
               <div className="grid grid-cols-4 gap-3">
                 <div>
@@ -2443,7 +2544,7 @@ export default function BudgetSimulator() {
                 <div className="flex justify-between">
                   <span className={`text-sm ${theme.textSecondary}`}>総資産</span>
                   <span className={`text-lg font-bold ${theme.text} tabular-nums`}>
-                    ¥{(assetData.savings + assetData.investments + (assetData.nisa || 0) + (assetData.dryPowder || 0)).toLocaleString()}
+                    ¥{((isNaN(assetData.savings) ? 0 : assetData.savings) + (isNaN(assetData.investments) ? 0 : assetData.investments) + (isNaN(assetData.nisa) ? 0 : (assetData.nisa || 0)) + (isNaN(assetData.dryPowder) ? 0 : (assetData.dryPowder || 0))).toLocaleString()}
                   </span>
                 </div>
               </div>
@@ -2913,6 +3014,18 @@ export default function BudgetSimulator() {
                   >
                     投資積立
                   </button>
+                  <button
+                    onClick={() => setEditingRecurring({ ...editingRecurring, type: 'fund', paymentMethod: 'cash' })}
+                    className={`py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
+                      editingRecurring?.type === 'fund' ? 'scale-105 shadow-md' : 'hover-scale'
+                    }`}
+                    style={{
+                      backgroundColor: editingRecurring?.type === 'fund' ? theme.green : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                      color: editingRecurring?.type === 'fund' ? '#fff' : theme.textSecondary
+                    }}
+                  >
+                    投資信託
+                  </button>
                 </div>
               </div>
 
@@ -2989,6 +3102,135 @@ export default function BudgetSimulator() {
             >
               閉じる
             </button>
+          </div>
+        </div>
+      )}
+
+      {showInvestModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
+          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full animate-slideUp`}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className={`text-xl font-bold ${theme.text}`}>📈 投資を実行</h2>
+              <button onClick={() => setShowInvestModal(false)} className={`text-2xl ${theme.textSecondary}`}>✕</button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>振替元</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setInvestForm({ ...investForm, fromSource: 'savings' })}
+                    className={`py-3 rounded-xl font-semibold text-sm transition-all ${
+                      investForm.fromSource === 'savings' ? 'scale-105' : ''
+                    }`}
+                    style={{
+                      backgroundColor: investForm.fromSource === 'savings' ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                      color: investForm.fromSource === 'savings' ? '#fff' : theme.textSecondary
+                    }}
+                  >
+                    💰 現預金<br/>
+                    <span className="text-xs tabular-nums">¥{((isNaN(assetData.savings) ? 0 : assetData.savings) / 10000).toFixed(0)}万</span>
+                  </button>
+                  <button
+                    onClick={() => setInvestForm({ ...investForm, fromSource: 'dryPowder' })}
+                    className={`py-3 rounded-xl font-semibold text-sm transition-all ${
+                      investForm.fromSource === 'dryPowder' ? 'scale-105' : ''
+                    }`}
+                    style={{
+                      backgroundColor: investForm.fromSource === 'dryPowder' ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                      color: investForm.fromSource === 'dryPowder' ? '#fff' : theme.textSecondary
+                    }}
+                  >
+                    💧 待機資金<br/>
+                    <span className="text-xs tabular-nums">¥{((isNaN(assetData.dryPowder) ? 0 : (assetData.dryPowder || 0)) / 10000).toFixed(0)}万</span>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>振替先</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: 'investments', label: '📊 投資', color: theme.purple },
+                    { key: 'nisa', label: '🌱 NISA', color: theme.green },
+                    { key: 'dryPowder', label: '💧 待機資金', color: theme.accent }
+                  ].map(({ key, label, color }) => (
+                    key !== investForm.fromSource && (
+                      <button
+                        key={key}
+                        onClick={() => setInvestForm({ ...investForm, targetAccount: key })}
+                        className={`py-2 rounded-xl font-semibold text-xs transition-all ${
+                          investForm.targetAccount === key ? 'scale-105' : ''
+                        }`}
+                        style={{
+                          backgroundColor: investForm.targetAccount === key ? color : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                          color: investForm.targetAccount === key ? '#fff' : theme.textSecondary
+                        }}
+                      >
+                        {label}
+                      </button>
+                    )
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>金額</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="100000"
+                  value={investForm.amount}
+                  onChange={(e) => {
+                    const value = e.target.value.replace(/[^0-9]/g, '');
+                    setInvestForm({ ...investForm, amount: value });
+                  }}
+                  className={`w-full px-4 py-3 rounded-xl tabular-nums text-lg font-bold transition-all ${
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                  } focus:outline-none focus:border-blue-500`}
+                />
+                <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>
+                  ¥{(Number(investForm.amount) || 0).toLocaleString()}
+                </p>
+              </div>
+
+              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3 text-sm`}>
+                <div className="flex justify-between">
+                  <span className={theme.textSecondary}>
+                    {investForm.fromSource === 'savings' ? '💰 現預金' : '💧 待機資金'} から
+                  </span>
+                  <span className={theme.textSecondary}>
+                    {investForm.targetAccount === 'investments' ? '📊 投資口座' : investForm.targetAccount === 'nisa' ? '🌱 NISA' : '💧 待機資金'} へ
+                  </span>
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className={`font-bold tabular-nums`} style={{ color: theme.red }}>
+                    -{(Number(investForm.amount) || 0).toLocaleString()}円
+                  </span>
+                  <span className={`font-bold tabular-nums`} style={{ color: theme.green }}>
+                    +{(Number(investForm.amount) || 0).toLocaleString()}円
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowInvestModal(false)}
+                className={`flex-1 px-4 py-3 rounded-xl font-bold ${
+                  darkMode ? 'bg-neutral-800 text-white' : 'border-2 border-neutral-300 text-neutral-700'
+                }`}
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={executeInvestment}
+                className="flex-1 px-4 py-3 rounded-xl font-bold text-white"
+                style={{ backgroundColor: theme.purple }}
+              >
+                振替実行
+              </button>
+            </div>
           </div>
         </div>
       )}
