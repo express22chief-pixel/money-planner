@@ -1,4 +1,4 @@
-import './index.css'
+　import './index.css'
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlusCircle, TrendingUp, Calendar, DollarSign, Sun, Moon, Zap, Droplets, Target, Settings, Edit2, RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, BarChart, Bar } from 'recharts';
@@ -3544,8 +3544,7 @@ export default function BudgetSimulator() {
                             if (data.assetData) setAssetData(data.assetData);
                             alert('インポートが完了しました！');
                           } else if (file.name.endsWith('.csv')) {
-                            const lines = rawContent.split('
-');
+                            const lines = rawContent.split('\n');
                             const imported = [];
                             for (let i = 1; i < lines.length; i++) {
                               const line = lines[i].trim();
