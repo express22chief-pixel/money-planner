@@ -539,32 +539,6 @@ export default function BudgetSimulator() {
     });
   };
 
-  const settleCredit = () => {
-    const today = new Date();
-    const settlementDate = new Date(today.getFullYear(), today.getMonth() + 1, 26);
-
-    // クレジット引き落とし取引（CFのみに影響、PLには影響しない）
-    const settlementTransaction = {
-      id: Date.now(),
-      date: settlementDate.toISOString().slice(0, 10),
-      category: 'クレジット引き落とし',
-      amount: -totalUnsettledCredit,
-      type: 'expense',
-      paymentMethod: 'cash',
-      settled: false, // 未来の日付なので未確定
-      isSettlement: true // PL計上済みフラグ
-    };
-
-    // 未確定クレジットを確定済みに変更
-    const updatedTransactions = transactions.map(t =>
-      t.paymentMethod === 'credit' && !t.settled && !t.isSettlement
-        ? { ...t, settled: true }
-        : t
-    );
-
-    setTransactions([settlementTransaction, ...updatedTransactions]);
-  };
-
   const closeMonth = () => {
     const cfBalance = currentBalance.cfBalance;
     const plannedInvestment = simulationSettings.monthlyInvestment;
@@ -1278,13 +1252,6 @@ export default function BudgetSimulator() {
                       ¥{totalUnsettledCredit.toLocaleString()}
                     </p>
                   </div>
-                  <button
-                    onClick={settleCredit}
-                    className="px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all duration-200 hover-scale"
-                    style={{ backgroundColor: theme.orange }}
-                  >
-                    確定
-                  </button>
                 </div>
               </div>
             )}
