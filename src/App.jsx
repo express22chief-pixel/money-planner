@@ -1,4 +1,4 @@
-　import './index.css'
+import './index.css'
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlusCircle, TrendingUp, Calendar, DollarSign, Sun, Moon, Zap, Droplets, Target, Settings, Edit2, RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, BarChart, Bar } from 'recharts';
@@ -3530,49 +3530,68 @@ export default function BudgetSimulator() {
               <div>
                 <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>データ管理</p>
                 <div className="space-y-2">
-                  <label className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium border-2 cursor-pointer transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}>
-                    <input type="file" accept=".csv,.json" className="hidden" onChange={(e) => {
+                  <div
+                    className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium border-2 cursor-pointer transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
+                    onClick={() => document.getElementById('import-file-input').click()}
+                  >
+                    📁 CSVをインポート
+                  </div>
+                  <input
+                    id="import-file-input"
+                    type="file"
+                    accept=".csv,.json"
+                    className="hidden"
+                    onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (!file) return;
                       const reader = new FileReader();
-                      reader.onload = (event) => {
+                      reader.onload = (ev) => {
                         try {
-                          const rawContent = event.target.result;
+                          const raw = ev.target.result;
                           if (file.name.endsWith('.json')) {
-                            const data = JSON.parse(rawContent);
-                            if (data.transactions) setTransactions(data.transactions);
-                            if (data.assetData) setAssetData(data.assetData);
+                            const d = JSON.parse(raw);
+                            if (d.transactions) setTransactions(d.transactions);
+                            if (d.assetData) setAssetData(d.assetData);
                             alert('インポートが完了しました！');
                           } else if (file.name.endsWith('.csv')) {
-                            const lines = rawContent.split('\n');
+                            const lines = raw.split('\n');
                             const imported = [];
                             for (let i = 1; i < lines.length; i++) {
                               const line = lines[i].trim();
                               if (!line) continue;
-                              const [date, category, amount, type] = line.split(',');
-                              if (!date || !category || !amount) continue;
-                              imported.push({ id: Date.now() + i, date: date.trim(), category: category.trim(), amount: parseFloat(amount.trim()), type: type?.trim() === 'income' ? 'income' : 'expense', settled: true });
+                              const [dt, cat, amt, tp] = line.split(',');
+                              if (!dt || !cat || !amt) continue;
+                              imported.push({ id: Date.now() + i, date: dt.trim(), category: cat.trim(), amount: parseFloat(amt.trim()), type: tp?.trim() === 'income' ? 'income' : 'expense', settled: true });
                             }
-                            if (imported.length > 0) { setTransactions([...imported, ...transactions]); alert(`${imported.length}件インポートしました！`); }
+                            if (imported.length > 0) {
+                              setTransactions([...imported, ...transactions]);
+                              alert(imported.length + '件インポートしました！');
+                            }
                           }
                         } catch(err) { alert('インポートに失敗しました'); }
                       };
                       reader.readAsText(file);
-                    }}>
-                    📁 CSVをインポート
-                  </label>
-                  <button onClick={() => {
-                    const data = JSON.stringify({ transactions, assetData, monthlyBudget, recurringTransactions, lifeEvents, simulationSettings }, null, 2);
-                    const blob = new Blob([data], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a'); a.href = url; a.download = 'money_planner_backup.json'; a.click();
-                    URL.revokeObjectURL(url);
-                  }}
-                  className={`w-full py-3 rounded-xl text-sm font-medium border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}>
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const data = JSON.stringify({ transactions, assetData, monthlyBudget, recurringTransactions, lifeEvents, simulationSettings }, null, 2);
+                      const blob = new Blob([data], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'money_planner_backup.json';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className={`w-full py-3 rounded-xl text-sm font-medium border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
+                  >
                     💾 データをバックアップ
                   </button>
-                  <button onClick={resetAllData}
-                    className="w-full py-3 rounded-xl text-sm font-semibold text-red-500 border-2 border-red-500 border-opacity-30 transition-all hover-scale">
+                  <button
+                    onClick={resetAllData}
+                    className="w-full py-3 rounded-xl text-sm font-semibold text-red-500 border-2 border-red-500/30 transition-all hover-scale"
+                  >
                     🗑️ 全データをリセット
                   </button>
                 </div>
