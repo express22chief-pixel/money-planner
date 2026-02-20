@@ -2627,7 +2627,7 @@ export default function BudgetSimulator() {
 
       {showRecurringModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full animate-slideUp`}>
+          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-xl font-bold ${theme.text}`}>
                 {editingRecurring ? '定期支払いを編集' : '定期支払いを追加'}
