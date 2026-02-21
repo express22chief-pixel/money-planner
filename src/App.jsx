@@ -1432,23 +1432,22 @@ export default function BudgetSimulator() {
                       style={{ animationDelay: `${idx * 0.04}s` }}>
                       <div className="flex items-center gap-2.5 flex-1">
                         <span className="text-lg leading-none">
-                          {t.isRecurring && (t.isInvestment ? '📈' : '🔄')}
-                          {!t.isRecurring && (t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵'))}
+                          {t.isRecurring ? (t.isInvestment ? '📈' : '🔄') : t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
                         </span>
                         <div className="flex-1 min-w-0">
                           <p className={`text-sm font-medium ${theme.text} truncate`}>{t.category}</p>
+                          {!t.settled && t.type === 'expense' && (
+                            <span className="text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor: theme.orange, color: '#000' }}>
+                              {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
+                            </span>
+                          )}
+                          {t.isInvestment && (
+                            <span className="text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>📈投資</span>
+                          )}
                           <p className={`text-xs ${theme.textSecondary} tabular-nums`}>{t.date}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        {!t.settled && t.type === 'expense' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor: theme.orange, color: '#000' }}>
-                            {t.isSettlement ? '引落' : t.paymentMethod === 'credit' ? '未確定' : '予定'}
-                          </span>
-                        )}
-                        {t.isInvestment && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>投資</span>
-                        )}
                         <p className="text-sm font-bold tabular-nums" style={{ color: t.amount >= 0 ? theme.green : (t.isInvestment ? '#a855f7' : theme.red) }}>
                           {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
                         </p>
