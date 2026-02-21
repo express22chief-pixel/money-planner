@@ -113,7 +113,8 @@ export default function BudgetSimulator() {
     category: '',
     type: 'expense',
     paymentMethod: 'credit',
-    date: new Date().toISOString().slice(0, 10)
+    date: new Date().toISOString().slice(0, 10),
+    memo: ''
   });
 
   const [simulationSettings, setSimulationSettings] = useState(() =>
@@ -659,6 +660,7 @@ export default function BudgetSimulator() {
       id: Date.now(),
       date: newTransaction.date,
       category: newTransaction.category,
+      memo: newTransaction.memo || '',
       amount: amount,
       type: newTransaction.type,
       paymentMethod: newTransaction.type === 'income' ? undefined : newTransaction.paymentMethod,
@@ -692,7 +694,8 @@ export default function BudgetSimulator() {
       category: '', 
       type: 'expense', 
       paymentMethod: 'credit',
-      date: new Date().toISOString().slice(0, 10)
+      date: new Date().toISOString().slice(0, 10),
+      memo: ''
     });
   };
 
@@ -1341,22 +1344,32 @@ export default function BudgetSimulator() {
                 <div className="flex gap-2">
                   <input type="date" value={newTransaction.date}
                     onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-                    className={`flex-1 px-3 py-2 rounded-xl text-sm appearance-none ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                    className={`flex-1 px-3 py-2 rounded-xl text-sm appearance-none ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
                     style={{ colorScheme: darkMode ? 'dark' : 'light' }} />
                   <input type="text" inputMode="numeric" placeholder="金額"
                     value={newTransaction.amount}
                     onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value.replace(/[^0-9]/g, '') })}
-                    className={`flex-1 px-3 py-2 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                    className={`flex-1 px-3 py-2 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
                 </div>
 
                 <select value={newTransaction.category}
                   onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`}>
+                  className={`w-full px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}>
                   <option value="">カテゴリを選択</option>
                   {(newTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
                     <option key={cat} value={cat}>{cat}</option>
                   ))}
                 </select>
+
+                <textarea
+                  rows={2}
+                  placeholder="メモ（任意）"
+                  value={newTransaction.memo}
+                  onChange={(e) => setNewTransaction({ ...newTransaction, memo: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-xl text-sm resize-none ${
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-200 placeholder-neutral-400'
+                  } focus:outline-none focus:border-blue-500`}
+                ></textarea>
 
                 <button onClick={addTransaction}
                   className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
@@ -1379,7 +1392,7 @@ export default function BudgetSimulator() {
               ) : (
                 <div className="space-y-2">
                   {recurringTransactions.map((r, idx) => (
-                    <div key={r.id} className={`flex items-center p-2.5 ${darkMode?'bg-neutral-800':'bg-neutral-50'} rounded-xl`}>
+                    <div key={r.id} className={`flex items-center p-2.5 ${darkMode?'bg-neutral-800/60 border border-neutral-700':'bg-neutral-50'} rounded-xl`}>
                       <span className="text-base mr-2.5">{r.type==='investment'||r.type==='fund'?'📈':'🔄'}</span>
                       <div className="flex-1 min-w-0">
                         <p className={`text-sm font-medium ${theme.text} truncate`}>{r.name}</p>
@@ -1428,7 +1441,7 @@ export default function BudgetSimulator() {
                 <div className="space-y-1">
                   {transactions.slice(0, 10).map((t, idx) => (
                     <div key={t.id} onClick={() => setEditingTransaction(t)}
-                      className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 hover-scale animate-fadeIn ${darkMode ? 'hover:bg-neutral-800' : 'hover:bg-neutral-50'}`}
+                      className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 hover-scale animate-fadeIn ${darkMode ? 'hover:bg-neutral-700/50' : 'hover:bg-neutral-50'}`}
                       style={{ animationDelay: `${idx * 0.04}s` }}>
                       <div className="flex items-center gap-2.5 flex-1">
                         <span className="text-lg leading-none">
@@ -1518,18 +1531,16 @@ export default function BudgetSimulator() {
                       <button
                         key={day}
                         onClick={() => {
-                          if (hasTransactions) {
-                            setSelectedDate(`${selectedMonth}-${String(day).padStart(2, '0')}`);
-                            setShowDateTransactionsModal(true);
-                          }
+                          setSelectedDate(`${selectedMonth}-${String(day).padStart(2, '0')}`);
+                          setShowDateTransactionsModal(true);
                         }}
-                        className={`aspect-square border rounded-lg p-1 transition-all duration-200 ${
-                          hasTransactions ? 'hover-scale cursor-pointer' : ''
-                        } ${
+                        className={`aspect-square border rounded-lg p-1 transition-all duration-200 hover-scale cursor-pointer ${
                           isToday 
-                            ? darkMode ? 'border-blue-500 bg-blue-900 bg-opacity-20' : 'border-blue-500 bg-blue-50'
-                            : darkMode ? 'border-neutral-800' : 'border-neutral-200'
-                        } ${hasTransactions ? (darkMode ? 'bg-neutral-800' : 'bg-neutral-50') : ''}`}
+                            ? darkMode ? 'border-blue-500 bg-blue-900 bg-opacity-30' : 'border-blue-500 bg-blue-50'
+                            : hasTransactions
+                              ? darkMode ? 'border-neutral-600 bg-neutral-800' : 'border-neutral-300 bg-neutral-50'
+                              : darkMode ? 'border-neutral-800 hover:border-neutral-600' : 'border-neutral-200 hover:border-neutral-300'
+                        }`}
                       >
                         <div className={`text-xs font-semibold ${isToday ? 'text-blue-500' : theme.text}`}>
                           {day}
@@ -1604,6 +1615,7 @@ export default function BudgetSimulator() {
                       borderRadius: '8px',
                       fontSize: '12px',
                       fontWeight: 500,
+                      color: darkMode ? '#e5e5e5' : '#171717',
                       color: darkMode ? '#fff' : '#000'
                     }}
                   />
@@ -1708,12 +1720,12 @@ export default function BudgetSimulator() {
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3`}>
+                <div className={`${darkMode ? 'bg-neutral-900 border border-neutral-700' : 'bg-neutral-50'} rounded-lg p-3`}>
                   <p className={`text-xs ${theme.textSecondary} mb-1`}>収入 (PL)</p>
                   <p className="text-lg font-bold tabular-nums" style={{ color: theme.green }}>¥{(budgetAnalysis.income.actual/10000).toFixed(1)}万</p>
                   <p className={`text-xs ${theme.textSecondary} tabular-nums`}>予算 ¥{(budgetAnalysis.income.budgeted/10000).toFixed(0)}万</p>
                 </div>
-                <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3`}>
+                <div className={`${darkMode ? 'bg-neutral-900 border border-neutral-700' : 'bg-neutral-50'} rounded-lg p-3`}>
                   <p className={`text-xs ${theme.textSecondary} mb-1`}>支出 (PL)</p>
                   <p className="text-lg font-bold tabular-nums" style={{ color: budgetAnalysis.expense.difference<=0?theme.green:theme.red }}>
                     ¥{(budgetAnalysis.expense.actual/10000).toFixed(1)}万
@@ -1721,7 +1733,7 @@ export default function BudgetSimulator() {
                   <p className={`text-xs ${theme.textSecondary} tabular-nums`}>予算 ¥{(budgetAnalysis.expense.budgeted/10000).toFixed(0)}万</p>
                 </div>
               </div>
-              <div className={`${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} rounded-lg p-3 space-y-1.5`}>
+              <div className={`${darkMode ? 'bg-neutral-900 border border-neutral-700' : 'bg-neutral-50'} rounded-lg p-3 space-y-1.5`}>
                 <div className="flex justify-between items-center">
                   <span className={`text-xs ${theme.textSecondary}`}>PL残高（発生ベース）</span>
                   <span className="text-sm font-bold tabular-nums" style={{ color: currentBalance.plBalance>=0?theme.green:theme.red }}>
@@ -1852,7 +1864,8 @@ export default function BudgetSimulator() {
                     step="1000000"
                     value={simulationSettings.targetAmount}
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, targetAmount: Number(e.target.value) })}
-                    className="w-full"
+                    className="w-full accent-slider"
+                    style={{ accentColor: theme.accent }}
                   />
                 </div>
 
@@ -1866,7 +1879,8 @@ export default function BudgetSimulator() {
                     max="30"
                     value={simulationSettings.years}
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, years: Number(e.target.value) })}
-                    className="w-full"
+                    className="w-full accent-slider"
+                    style={{ accentColor: theme.accent }}
                   />
                 </div>
 
@@ -1881,7 +1895,8 @@ export default function BudgetSimulator() {
                     step="10000"
                     value={simulationSettings.monthlySavings}
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, monthlySavings: Number(e.target.value) })}
-                    className="w-full"
+                    className="w-full accent-slider"
+                    style={{ accentColor: theme.accent }}
                   />
                 </div>
 
@@ -1896,7 +1911,8 @@ export default function BudgetSimulator() {
                     step="10000"
                     value={simulationSettings.monthlyInvestment}
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, monthlyInvestment: Number(e.target.value) })}
-                    className="w-full"
+                    className="w-full accent-slider"
+                    style={{ accentColor: theme.accent }}
                   />
                 </div>
 
@@ -1911,7 +1927,8 @@ export default function BudgetSimulator() {
                     step="0.5"
                     value={simulationSettings.returnRate}
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, returnRate: Number(e.target.value) })}
-                    className="w-full"
+                    className="w-full accent-slider"
+                    style={{ accentColor: theme.accent }}
                   />
                 </div>
 
@@ -1926,7 +1943,8 @@ export default function BudgetSimulator() {
                     step="0.1"
                     value={simulationSettings.savingsInterestRate}
                     onChange={(e) => setSimulationSettings({ ...simulationSettings, savingsInterestRate: Number(e.target.value) })}
-                    className="w-full"
+                    className="w-full accent-slider"
+                    style={{ accentColor: theme.accent }}
                   />
                   <p className={`text-xs ${theme.textSecondary} mt-1`}>普通預金・定期預金の金利を設定</p>
                 </div>
@@ -1989,7 +2007,8 @@ export default function BudgetSimulator() {
                           step="100000"
                           value={simulationSettings.lumpSumAmount}
                           onChange={(e) => setSimulationSettings({ ...simulationSettings, lumpSumAmount: Number(e.target.value) })}
-                          className="w-full"
+                          className="w-full accent-slider"
+                          style={{ accentColor: theme.accent }}
                         />
                       </div>
 
@@ -2332,7 +2351,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, savings: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{assetData.savings.toLocaleString()}</p>
@@ -2349,7 +2368,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, investments: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{assetData.investments.toLocaleString()}</p>
@@ -2366,7 +2385,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, nisa: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{(assetData.nisa || 0).toLocaleString()}</p>
@@ -2386,7 +2405,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, dryPowder: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{(assetData.dryPowder || 0).toLocaleString()}</p>
@@ -2433,7 +2452,7 @@ export default function BudgetSimulator() {
                     setMonthlyBudget({ ...monthlyBudget, income: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{monthlyBudget.income.toLocaleString()}</p>
@@ -2542,7 +2561,7 @@ export default function BudgetSimulator() {
                   value={newCategoryName}
                   onChange={(e) => setNewCategoryName(e.target.value)}
                   className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
               </div>
@@ -2605,7 +2624,7 @@ export default function BudgetSimulator() {
                   value={editingRecurring?.name || ''}
                   onChange={(e) => setEditingRecurring({ ...editingRecurring, name: e.target.value })}
                   className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
               </div>
@@ -2622,7 +2641,7 @@ export default function BudgetSimulator() {
                     setEditingRecurring({ ...editingRecurring, amount: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>
@@ -2636,7 +2655,7 @@ export default function BudgetSimulator() {
                   value={editingRecurring?.category || ''}
                   onChange={(e) => setEditingRecurring({ ...editingRecurring, category: e.target.value })}
                   className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 >
                   <option value="">選択してください</option>
@@ -2695,7 +2714,7 @@ export default function BudgetSimulator() {
                     value={editingRecurring?.day || ''}
                     onChange={(e) => setEditingRecurring({ ...editingRecurring, day: Number(e.target.value) })}
                     className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                      darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                      darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                     } focus:outline-none focus:border-blue-500`}
                   />
                   <p className={`text-xs ${theme.textSecondary} mt-1`}>毎月{editingRecurring?.day || '?'}日</p>
@@ -2781,7 +2800,7 @@ export default function BudgetSimulator() {
                   value={editingRecurring?.startDate || new Date().toISOString().slice(0, 10)}
                   onChange={(e) => setEditingRecurring({ ...editingRecurring, startDate: e.target.value })}
                   className={`w-full px-3 py-2 rounded-xl text-base appearance-none transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                   style={{ colorScheme: darkMode ? 'dark' : 'light' }}
                 />
@@ -2806,7 +2825,7 @@ export default function BudgetSimulator() {
                     value={editingRecurring.endDate}
                     onChange={(e) => setEditingRecurring({ ...editingRecurring, endDate: e.target.value })}
                     className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
-                      darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                      darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                     } focus:outline-none focus:border-blue-500`}
                     style={{ colorScheme: darkMode ? 'dark' : 'light' }}
                   />
@@ -2899,64 +2918,160 @@ export default function BudgetSimulator() {
         </div>
       )}
 
-      {showDateTransactionsModal && selectedDate && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className={`text-xl font-bold ${theme.text}`}>
-                {new Date(selectedDate).toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' })}の取引
-              </h2>
-              <button onClick={() => {
-                setShowDateTransactionsModal(false);
-                setSelectedDate(null);
-              }} className={`text-2xl ${theme.textSecondary}`}>✕</button>
+      {showDateTransactionsModal && selectedDate && (() => {
+        const dayTxns = getTransactionsForDay(selectedDate.slice(0, 7), Number(selectedDate.slice(-2)));
+        const dateLabel = new Date(selectedDate + 'T00:00:00').toLocaleDateString('ja-JP', { month: 'long', day: 'numeric' });
+        return (
+        <div className="fixed inset-0 bg-black/60 flex items-end justify-center z-50 animate-fadeIn" onClick={() => { setShowDateTransactionsModal(false); setSelectedDate(null); }}>
+          <div className={`${theme.cardGlass} rounded-t-3xl w-full max-w-md max-h-[90vh] overflow-y-auto animate-slideUp`} onClick={e => e.stopPropagation()}>
+
+            {/* ヘッダー */}
+            <div className={`sticky top-0 flex items-center justify-between px-5 pt-5 pb-3 ${darkMode ? 'bg-neutral-900/95' : 'bg-white/95'} backdrop-blur-md border-b ${theme.border}`}>
+              <div>
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest`}>履歴</p>
+                <h2 className={`text-lg font-bold ${theme.text}`}>{dateLabel}</h2>
+              </div>
+              <button onClick={() => { setShowDateTransactionsModal(false); setSelectedDate(null); }}
+                className={`w-8 h-8 flex items-center justify-center rounded-full ${darkMode ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-100 text-neutral-600'} text-sm font-bold`}>
+                ✕
+              </button>
             </div>
 
-            <div className="space-y-2">
-              {getTransactionsForDay(selectedDate.slice(0, 7), Number(selectedDate.slice(-2))).map((t) => (
-                <button
-                  key={t.id}
-                  onClick={() => {
-                    setEditingTransaction(t);
-                    setShowDateTransactionsModal(false);
-                  }}
-                  className={`w-full flex items-center justify-between p-3 rounded-lg cursor-pointer transition-all duration-200 hover-scale ${
-                    darkMode ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 flex-1">
-                    <span className="text-base">
-                      {t.isRecurring ? '🔄' : t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
-                    </span>
-                    <div className="flex-1 text-left">
-                      <p className={`text-sm font-medium ${theme.text}`}>{t.category}</p>
-                      {!t.settled && t.type === 'expense' && (
-                        <span className="text-xs px-2 py-0.5 rounded font-medium mt-1 inline-block" style={{ backgroundColor: theme.orange, color: '#000' }}>
-                          {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
+            <div className="px-5 pb-8 pt-4 space-y-4">
+
+              {/* 既存の取引一覧 */}
+              {dayTxns.length > 0 ? (
+                <div className="space-y-2">
+                  {dayTxns.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => { setEditingTransaction(t); setShowDateTransactionsModal(false); }}
+                      className={`w-full flex items-center justify-between p-3 rounded-xl transition-all duration-200 hover-scale ${
+                        darkMode ? 'bg-neutral-800 hover:bg-neutral-700' : 'bg-neutral-50 hover:bg-neutral-100'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 flex-1 text-left">
+                        <span className="text-base">
+                          {t.isRecurring ? (t.isInvestment ? '📈' : '🔄') : t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
                         </span>
-                      )}
-                    </div>
-                  </div>
-                  <p className={`text-base font-bold tabular-nums`} style={{ color: t.amount >= 0 ? theme.green : theme.red }}>
-                    {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
-                  </p>
-                </button>
-              ))}
-            </div>
+                        <div className="flex-1">
+                          <p className={`text-sm font-semibold ${theme.text}`}>{t.category}</p>
+                          {t.memo && <p className={`text-xs ${theme.textSecondary} mt-0.5`}>{t.memo}</p>}
+                          {!t.settled && t.type === 'expense' && (
+                            <span className="text-xs px-1.5 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor: theme.orange, color: '#000' }}>
+                              {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-sm font-bold tabular-nums" style={{ color: t.amount >= 0 ? theme.green : (t.isInvestment ? '#a855f7' : theme.red) }}>
+                        {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm text-center py-4 ${theme.textSecondary}`}>この日の取引はありません</p>
+              )}
 
-            <button
-              onClick={() => {
-                setShowDateTransactionsModal(false);
-                setSelectedDate(null);
-              }}
-              className="w-full mt-4 py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
-              style={{ backgroundColor: theme.accent }}
-            >
-              閉じる
-            </button>
+              {/* 区切り */}
+              <div className={`border-t ${theme.border}`} />
+
+              {/* この日に新規取引を追加するフォーム */}
+              <div>
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>この日に追加</p>
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    {[
+                      { type: 'expense', label: '支出', color: theme.red },
+                      { type: 'income', label: '収入', color: theme.green },
+                    ].map(({ type, label, color }) => (
+                      <button key={type}
+                        onClick={() => setNewTransaction({ ...newTransaction, type, date: selectedDate, paymentMethod: type === 'expense' ? 'credit' : undefined })}
+                        className="flex-1 py-2 rounded-xl font-bold text-sm transition-all"
+                        style={{
+                          backgroundColor: newTransaction.type === type ? color : (darkMode ? '#262626' : '#f5f5f5'),
+                          color: newTransaction.type === type ? '#fff' : theme.textSecondary,
+                        }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {newTransaction.type === 'expense' && (
+                    <div className="flex gap-2">
+                      {[{ key: 'credit', label: '💳 クレジット' }, { key: 'cash', label: '💵 現金' }].map(({ key, label }) => (
+                        <button key={key}
+                          onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: key })}
+                          className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                          style={{
+                            backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#1C1C1E' : '#f0f0f0'),
+                            color: newTransaction.paymentMethod === key ? '#fff' : theme.textSecondary
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex gap-2">
+                    <input type="text" inputMode="numeric" placeholder="金額"
+                      value={newTransaction.amount}
+                      onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value.replace(/[^0-9]/g, '') })}
+                      className={`flex-1 px-3 py-2 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                    <select value={newTransaction.category}
+                      onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
+                      className={`flex-1 px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}>
+                      <option value="">カテゴリ</option>
+                      {(newTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <input type="text" placeholder="メモ（任意）"
+                    value={newTransaction.memo}
+                    onChange={(e) => setNewTransaction({ ...newTransaction, memo: e.target.value })}
+                    className={`w-full px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-200 placeholder-neutral-400'} focus:outline-none`} />
+
+                  <button
+                    onClick={() => {
+                      if (!newTransaction.amount || !newTransaction.category) return;
+                      const amt = newTransaction.type === 'expense'
+                        ? -Math.abs(Number(newTransaction.amount))
+                        : Math.abs(Number(newTransaction.amount));
+                      const t = {
+                        id: Date.now(),
+                        date: selectedDate,
+                        category: newTransaction.category,
+                        memo: newTransaction.memo || '',
+                        amount: amt,
+                        type: newTransaction.type,
+                        paymentMethod: newTransaction.type === 'income' ? undefined : newTransaction.paymentMethod,
+                        settled: newTransaction.type === 'income' ? true : (newTransaction.paymentMethod === 'cash'),
+                        isSettlement: false
+                      };
+                      if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
+                        const sd = new Date(selectedDate);
+                        const settlementDate = new Date(sd.getFullYear(), sd.getMonth() + 1, 26).toISOString().slice(0, 10);
+                        setTransactions([t, { id: Date.now()+1, date: settlementDate, category: 'クレジット引き落とし', amount: amt, type: 'expense', paymentMethod: 'cash', settled: false, isSettlement: true }, ...transactions]);
+                      } else {
+                        setTransactions([t, ...transactions]);
+                      }
+                      setNewTransaction({ amount: '', category: '', type: 'expense', paymentMethod: 'credit', date: new Date().toISOString().slice(0, 10), memo: '' });
+                    }}
+                    className="w-full py-2.5 rounded-xl font-semibold text-white transition-all hover-scale"
+                    style={{ backgroundColor: theme.accent }}>
+                    追加する
+                  </button>
+                </div>
+              </div>
+
+            </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {showInvestModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
@@ -3038,7 +3153,7 @@ export default function BudgetSimulator() {
                     setInvestForm({ ...investForm, amount: value });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums text-lg font-bold transition-all ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   } focus:outline-none focus:border-blue-500`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>
@@ -3279,7 +3394,7 @@ export default function BudgetSimulator() {
                     value={editingLifeEvent.name || ''}
                     onChange={(e) => setEditingLifeEvent({ ...editingLifeEvent, name: e.target.value })}
                     className={`w-full px-4 py-2 rounded-lg ${
-                      darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                      darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                     }`}
                     placeholder="例：結婚"
                   />
@@ -3296,7 +3411,7 @@ export default function BudgetSimulator() {
                       setEditingLifeEvent({ ...editingLifeEvent, amount: Number(value) });
                     }}
                     className={`w-full px-4 py-2 rounded-lg tabular-nums ${
-                      darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                      darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                     }`}
                     placeholder="3000000"
                   />
@@ -3312,7 +3427,7 @@ export default function BudgetSimulator() {
                     value={editingLifeEvent.date || ''}
                     onChange={(e) => setEditingLifeEvent({ ...editingLifeEvent, date: e.target.value })}
                     className={`w-full px-4 py-2 rounded-lg ${
-                      darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                      darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                     }`}
                   />
                 </div>
@@ -3354,7 +3469,7 @@ export default function BudgetSimulator() {
                   value={userInfo?.name || ''}
                   onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
                   className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
                   } focus:outline-none`}
                 />
               </div>
@@ -3367,7 +3482,7 @@ export default function BudgetSimulator() {
                   value={userInfo?.age || ''}
                   onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
                   className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
                   } focus:outline-none`}
                 />
               </div>
@@ -3384,7 +3499,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, savings: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
                   } focus:outline-none`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{assetData.savings.toLocaleString()}</p>
@@ -3402,7 +3517,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, investments: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
                   } focus:outline-none`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{assetData.investments.toLocaleString()}</p>
@@ -3420,7 +3535,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, nisa: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
                   } focus:outline-none`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{(assetData.nisa || 0).toLocaleString()}</p>
@@ -3441,7 +3556,7 @@ export default function BudgetSimulator() {
                     setAssetData({ ...assetData, dryPowder: Number(value) });
                   }}
                   className={`w-full px-4 py-3 rounded-xl tabular-nums transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 focus:border-blue-500' : 'bg-white border border-neutral-200 focus:border-blue-500'
                   } focus:outline-none`}
                 />
                 <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{(assetData.dryPowder || 0).toLocaleString()}</p>
@@ -3468,7 +3583,7 @@ export default function BudgetSimulator() {
       {showSettings && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-end justify-center p-0 z-50 animate-fadeIn" onClick={() => setShowSettings(false)}>
           <div className={`${theme.cardGlass} rounded-t-3xl w-full max-w-md max-h-[85vh] overflow-y-auto animate-slideUp`} onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 flex items-center justify-between px-6 pt-5 pb-3" style={{ backgroundColor: 'inherit' }}>
+            <div className="sticky top-0 flex items-center justify-between px-6 pt-5 pb-3" style={{ backgroundColor: darkMode ? '#171717' : '#ffffff' }}>
               <h2 className={`text-xl font-bold ${theme.text}`}>設定</h2>
               <button onClick={() => setShowSettings(false)} className={`w-8 h-8 flex items-center justify-center rounded-full ${darkMode ? 'bg-neutral-800' : 'bg-neutral-100'} ${theme.text}`}>✕</button>
             </div>
@@ -3481,12 +3596,12 @@ export default function BudgetSimulator() {
                   <div>
                     <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>名前</label>
                     <input type="text" value={userInfo?.name || ''} onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
                   </div>
                   <div>
                     <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>年齢</label>
                     <input type="number" value={userInfo?.age || ''} onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
                   </div>
                 </div>
               </div>
@@ -3508,7 +3623,7 @@ export default function BudgetSimulator() {
                 </div>
                 <div className="flex gap-2 mb-2">
                   <input type="text" placeholder="新しいカテゴリ名" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)}
-                    className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                    className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
                   <button onClick={addCustomCategory}
                     className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
                     style={{ backgroundColor: theme.accent }}>追加</button>
@@ -3758,7 +3873,7 @@ export default function BudgetSimulator() {
                     setEditingTransaction({ ...editingTransaction, amount });
                   }}
                   className={`w-full px-4 py-2 rounded-lg tabular-nums ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   }`}
                 />
               </div>
@@ -3769,7 +3884,7 @@ export default function BudgetSimulator() {
                   value={editingTransaction.category}
                   onChange={(e) => setEditingTransaction({ ...editingTransaction, category: e.target.value })}
                   className={`w-full px-4 py-2 rounded-lg ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   }`}
                 >
                   {(editingTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
@@ -3785,9 +3900,22 @@ export default function BudgetSimulator() {
                   value={editingTransaction.date}
                   onChange={(e) => setEditingTransaction({ ...editingTransaction, date: e.target.value })}
                   className={`w-full px-2 py-2 rounded-lg text-sm ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
                   }`}
                   style={{ colorScheme: darkMode ? 'dark' : 'light' }}
+                />
+              </div>
+
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>メモ</label>
+                <input
+                  type="text"
+                  placeholder="メモ（任意）"
+                  value={editingTransaction.memo || ''}
+                  onChange={(e) => setEditingTransaction({ ...editingTransaction, memo: e.target.value })}
+                  className={`w-full px-4 py-2 rounded-lg text-sm ${
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-200 placeholder-neutral-400'
+                  } focus:outline-none`}
                 />
               </div>
             </div>
