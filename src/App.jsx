@@ -1366,6 +1366,41 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
+            {/* 定期支払い */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</h2>
+                <button onClick={() => { setEditingRecurring(null); setShowRecurringModal(true); }}
+                  className="px-3 py-1 rounded-lg text-xs font-semibold text-white hover-scale"
+                  style={{ backgroundColor: theme.accent }}>+ 追加</button>
+              </div>
+              {recurringTransactions.length === 0 ? (
+                <p className={`text-sm text-center py-4 ${theme.textSecondary}`}>定期支払いを追加してください</p>
+              ) : (
+                <div className="space-y-2">
+                  {recurringTransactions.map((r, idx) => (
+                    <div key={r.id} className={`flex items-center p-2.5 ${darkMode?'bg-neutral-800':'bg-neutral-50'} rounded-xl`}>
+                      <span className="text-base mr-2.5">{r.type==='investment'||r.type==='fund'?'📈':'🔄'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${theme.text} truncate`}>{r.name}</p>
+                        <p className={`text-xs ${theme.textSecondary}`}>
+                          毎月{r.day}日
+                          {(r.type==='investment'||r.type==='fund') && (
+                            <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>投資</span>
+                          )}
+                        </p>
+                      </div>
+                      <p className="text-sm font-bold tabular-nums mr-2" style={{ color: r.type==='investment'||r.type==='fund'?'#a855f7':undefined }}>
+                        ¥{r.amount.toLocaleString()}
+                      </p>
+                      <button onClick={() => { setEditingRecurring(r); setShowRecurringModal(true); }} className="p-1 text-blue-500 hover:scale-110 transition-transform">✏️</button>
+                      <button onClick={() => deleteRecurring(r.id)} className="p-1 text-red-500 hover:scale-110 transition-transform">🗑️</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* 最近の取引 */}
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <div className="flex items-center justify-between mb-3">
@@ -1767,41 +1802,6 @@ export default function BudgetSimulator() {
                 </div>
               );
             })()}
-
-            {/* 定期支払い */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</h2>
-                <button onClick={() => { setEditingRecurring(null); setShowRecurringModal(true); }}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold text-white hover-scale"
-                  style={{ backgroundColor: theme.accent }}>+ 追加</button>
-              </div>
-              {recurringTransactions.length === 0 ? (
-                <p className={`text-sm text-center py-4 ${theme.textSecondary}`}>定期支払いを追加してください</p>
-              ) : (
-                <div className="space-y-2">
-                  {recurringTransactions.map((r, idx) => (
-                    <div key={r.id} className={`flex items-center p-2.5 ${darkMode?'bg-neutral-800':'bg-neutral-50'} rounded-xl`}>
-                      <span className="text-base mr-2.5">{r.type==='investment'||r.type==='fund'?'📈':'🔄'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${theme.text} truncate`}>{r.name}</p>
-                        <p className={`text-xs ${theme.textSecondary}`}>
-                          毎月{r.day}日
-                          {(r.type==='investment'||r.type==='fund') && (
-                            <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>投資</span>
-                          )}
-                        </p>
-                      </div>
-                      <p className="text-sm font-bold tabular-nums mr-2" style={{ color: r.type==='investment'||r.type==='fund'?'#a855f7':undefined }}>
-                        ¥{r.amount.toLocaleString()}
-                      </p>
-                      <button onClick={() => { setEditingRecurring(r); setShowRecurringModal(true); }} className="p-1 text-blue-500 hover:scale-110 transition-transform">✏️</button>
-                      <button onClick={() => deleteRecurring(r.id)} className="p-1 text-red-500 hover:scale-110 transition-transform">🗑️</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
 
           </div>
         )}
