@@ -1314,7 +1314,7 @@ export default function BudgetSimulator() {
                       className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all duration-200`}
                       style={{
                         backgroundColor: newTransaction.type === type ? color : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                        color: newTransaction.type === type ? '#fff' : theme.textSecondary,
+                        color: newTransaction.type === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
                         transform: newTransaction.type === type ? 'scale(1.02)' : 'scale(1)',
                       }}>
                       {label}
@@ -1333,7 +1333,7 @@ export default function BudgetSimulator() {
                         className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200`}
                         style={{
                           backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#262626' : '#f0f0f0'),
-                          color: newTransaction.paymentMethod === key ? '#fff' : theme.textSecondary
+                          color: newTransaction.paymentMethod === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
                         }}>
                         {label}
                       </button>
@@ -1403,7 +1403,7 @@ export default function BudgetSimulator() {
                           )}
                         </p>
                       </div>
-                      <p className="text-sm font-bold tabular-nums mr-2" style={{ color: r.type==='investment'||r.type==='fund'?'#a855f7':undefined }}>
+                      <p className="text-sm font-bold tabular-nums mr-2" style={{ color: r.type==='investment'||r.type==='fund'?'#a855f7':(darkMode ? '#e5e5e5' : '#171717') }}>
                         ¥{r.amount.toLocaleString()}
                       </p>
                       <button onClick={() => { setEditingRecurring(r); setShowRecurringModal(true); }} className="p-1 text-blue-500 hover:scale-110 transition-transform">✏️</button>
@@ -2991,7 +2991,7 @@ export default function BudgetSimulator() {
                         className="flex-1 py-2 rounded-xl font-bold text-sm transition-all"
                         style={{
                           backgroundColor: newTransaction.type === type ? color : (darkMode ? '#262626' : '#f5f5f5'),
-                          color: newTransaction.type === type ? '#fff' : theme.textSecondary,
+                          color: newTransaction.type === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
                         }}>
                         {label}
                       </button>
@@ -3006,7 +3006,7 @@ export default function BudgetSimulator() {
                           className="flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all"
                           style={{
                             backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#1C1C1E' : '#f0f0f0'),
-                            color: newTransaction.paymentMethod === key ? '#fff' : theme.textSecondary
+                            color: newTransaction.paymentMethod === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
                           }}>
                           {label}
                         </button>
@@ -3615,7 +3615,7 @@ export default function BudgetSimulator() {
                       className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all`}
                       style={{
                         backgroundColor: newCategoryType === type ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                        color: newCategoryType === type ? '#fff' : theme.textSecondary
+                        color: newCategoryType === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
                       }}>
                       {type === 'expense' ? '支出カテゴリ' : '収入カテゴリ'}
                     </button>
@@ -3965,7 +3965,7 @@ export default function BudgetSimulator() {
               className={`flex-1 py-2 flex flex-col items-center gap-0.5 transition-all duration-200 ${
                 activeTab === tab.id ? 'scale-110' : 'hover:scale-105'
               }`}
-              style={{ color: activeTab === tab.id ? theme.accent : theme.textSecondary }}
+              style={{ color: activeTab === tab.id ? theme.accent : (darkMode ? '#8E8E93' : '#9ca3af') }}
             >
               <div className={`p-1.5 rounded-xl transition-all duration-200 ${activeTab === tab.id ? (darkMode ? 'bg-neutral-800' : 'bg-blue-50') : ''}`}>
                 {tab.icon}
