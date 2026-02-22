@@ -4333,7 +4333,7 @@ export default function BudgetSimulator() {
                 <p className={`text-xs text-center ${theme.textSecondary}`}>引き落とし予約は元の取引から自動生成されます。金額を変更したい場合は元の取引を編集してください。</p>
                 <button onClick={() => setEditingTransaction(null)} className={`w-full py-3 rounded-xl font-bold ${darkMode ? 'bg-neutral-800 text-white' : 'border-2 border-neutral-300 text-neutral-700'}`}>閉じる</button>
               </div>
-            ) : (
+            ) : (<>
             <div className="space-y-4">
               <div className="flex gap-2">
                 <button
@@ -4473,7 +4473,7 @@ export default function BudgetSimulator() {
                 保存
               </button>
             </div>
-            )} {/* end of else (non-settlement) */}
+            </>)} {/* end of else (non-settlement) */}
           </div>
         </div>
       )}
