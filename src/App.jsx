@@ -181,6 +181,7 @@ export default function BudgetSimulator() {
   }, []);
 
   const [showCloseMonthModal, setShowCloseMonthModal] = useState(false);
+  const [closingTargetMonth, setClosingTargetMonth] = useState(null);
   const [closeMonthData, setCloseMonthData] = useState({ savedAmount: 0, investAmount: 0, dryPowderAmount: 0 });
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [showLifeEventModal, setShowLifeEventModal] = useState(false);
@@ -581,6 +582,34 @@ export default function BudgetSimulator() {
   const currentMonth = new Date().toISOString().slice(0, 7);
   const currentBalance = calculateMonthlyBalance(currentMonth);
 
+  // 過去6ヶ月のうち、取引があるのに未締めの月を返す
+  const getUnclosedMonths = () => {
+    const result = [];
+    const today = new Date();
+    for (let i = 1; i <= 6; i++) {
+      const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const ym = d.toISOString().slice(0, 7);
+      if (monthlyHistory[ym]) continue; // 締め済み
+      const hasTxn = transactions.some(t => t.date.startsWith(ym));
+      if (hasTxn) result.push(ym);
+    }
+    return result;
+  };
+  const unclosedMonths = getUnclosedMonths();
+
+  const openCloseMonthModal = (targetMonth) => {
+    const tMonth = targetMonth || currentMonth;
+    const tBalance = calculateMonthlyBalance(tMonth);
+    const cfBalance = isNaN(tBalance.cfBalance) ? 0 : tBalance.cfBalance;
+    const plannedTotal = simulationSettings.monthlyInvestment + simulationSettings.monthlySavings;
+    setClosingTargetMonth(tMonth);
+    setCloseMonthData(cfBalance >= plannedTotal
+      ? { savedAmount: cfBalance - simulationSettings.monthlyInvestment, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
+      : { savedAmount: 0, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
+    );
+    setShowCloseMonthModal(true);
+  };
+
   const calculateBudgetAnalysis = () => {
     const actualIncome = currentBalance.plIncome;
     const actualExpense = currentBalance.plExpense;
@@ -700,8 +729,10 @@ export default function BudgetSimulator() {
   };
 
 
-  const closeMonth = () => {
-    const cfBalance = isNaN(currentBalance.cfBalance) ? 0 : currentBalance.cfBalance;
+  const closeMonth = (targetMonth) => {
+    const tMonth = targetMonth || currentMonth;
+    const tBalance = calculateMonthlyBalance(tMonth);
+    const cfBalance = isNaN(tBalance.cfBalance) ? 0 : tBalance.cfBalance;
     const plannedInvestment = simulationSettings.monthlyInvestment;
     const plannedSavings = simulationSettings.monthlySavings;
     const totalPlanned = plannedInvestment + plannedSavings;
@@ -723,9 +754,8 @@ export default function BudgetSimulator() {
         .filter(r => r.type === 'investment' || r.type === 'fund')
         .map(r => r.id)
     );
-    const currentMonthStr = new Date().toISOString().slice(0, 7);
     const settledInvestments = transactions.filter(t =>
-      t.date.startsWith(currentMonthStr) && t.settled && t.recurringId && recurringInvestIds.has(t.recurringId)
+      t.date.startsWith(tMonth) && t.settled && t.recurringId && recurringInvestIds.has(t.recurringId)
     );
     const autoInvestAmount = settledInvestments
       .filter(t => {
@@ -755,8 +785,8 @@ export default function BudgetSimulator() {
 
     setMonthlyHistory(prev => ({
       ...prev,
-      [currentMonth]: {
-        plBalance: currentBalance.plBalance,
+      [tMonth]: {
+        plBalance: tBalance.plBalance,
         cfBalance: cfBalance,
         savedAmount: actualSavings,
         investAmount: actualInvest,
@@ -1300,6 +1330,30 @@ export default function BudgetSimulator() {
         {activeTab === 'home' && (
           <div className="space-y-3 animate-fadeIn">
 
+            {/* 未締め月バナー */}
+            {unclosedMonths.length > 0 && (
+              <div className={`rounded-xl p-4 border-l-4`} style={{ backgroundColor: darkMode ? 'rgba(255,159,10,0.12)' : 'rgba(255,159,10,0.08)', borderColor: theme.orange }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <p className="text-sm font-bold mb-1" style={{ color: theme.orange }}>⚠ 未締めの月があります</p>
+                    <p className={`text-xs ${theme.textSecondary} mb-2`}>以下の月の収支がまだ確定していません。</p>
+                    <div className="flex flex-wrap gap-2">
+                      {unclosedMonths.map(ym => (
+                        <button
+                          key={ym}
+                          onClick={() => openCloseMonthModal(ym)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white hover-scale transition-all"
+                          style={{ backgroundColor: theme.orange }}
+                        >
+                          {ym} を締める
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* 取引入力 */}
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>取引を追加</h2>
@@ -1420,15 +1474,7 @@ export default function BudgetSimulator() {
                 <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>最近の取引</h2>
                 {!monthlyHistory[currentMonth] && currentBalance.cfBalance !== 0 && (
                   <button
-                    onClick={() => {
-                      const cfBalance = currentBalance.cfBalance;
-                      const plannedTotal = simulationSettings.monthlyInvestment + simulationSettings.monthlySavings;
-                      setCloseMonthData(cfBalance >= plannedTotal
-                        ? { savedAmount: cfBalance - simulationSettings.monthlyInvestment, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
-                        : { savedAmount: 0, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
-                      );
-                      setShowCloseMonthModal(true);
-                    }}
+                    onClick={() => openCloseMonthModal()}
                     className="px-3 py-1.5 rounded-xl text-xs font-semibold text-white hover-scale"
                     style={{ backgroundColor: theme.accent }}>
                     今月を締める
@@ -1591,6 +1637,17 @@ export default function BudgetSimulator() {
                 </div>
               </div>
             </div>
+
+            {/* 未締め月の締めるボタン（履歴タブ） */}
+            {!monthlyHistory[selectedMonth] && calculateMonthlyBalance(selectedMonth).cfBalance !== 0 && selectedMonth < currentMonth && (
+              <button
+                onClick={() => openCloseMonthModal(selectedMonth)}
+                className="w-full py-3 rounded-xl font-semibold text-white transition-all hover-scale flex items-center justify-center gap-2"
+                style={{ backgroundColor: theme.orange }}
+              >
+                ⚠ {selectedMonth} を締める
+              </button>
+            )}
 
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>過去6ヶ月の推移（PL）</h2>
@@ -1755,15 +1812,7 @@ export default function BudgetSimulator() {
               </div>
               {!monthlyHistory[currentMonth] && currentBalance.cfBalance !== 0 && (
                 <button
-                  onClick={() => {
-                    const cfBalance = currentBalance.cfBalance;
-                    const plannedTotal = simulationSettings.monthlyInvestment + simulationSettings.monthlySavings;
-                    setCloseMonthData(cfBalance >= plannedTotal
-                      ? { savedAmount: cfBalance - simulationSettings.monthlyInvestment, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
-                      : { savedAmount: 0, investAmount: simulationSettings.monthlyInvestment, dryPowderAmount: 0 }
-                    );
-                    setShowCloseMonthModal(true);
-                  }}
+                  onClick={() => openCloseMonthModal()}
                   className="w-full mt-3 py-2.5 rounded-xl font-semibold text-white transition-all hover-scale"
                   style={{ backgroundColor: theme.accent }}
                 >
@@ -3719,13 +3768,19 @@ export default function BudgetSimulator() {
       {showCloseMonthModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full`}>
-            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>今月を締める</h2>
-            <p className={`${theme.textSecondary} mb-2`}>
-              今月のPL（発生ベース）: <span className="font-bold" style={{ color: currentBalance.plBalance >= 0 ? theme.green : theme.red }}>¥{currentBalance.plBalance.toLocaleString()}</span>
-            </p>
-            <p className={`${theme.textSecondary} mb-4`}>
-              今月のCF（現金ベース）: <span className="font-bold" style={{ color: currentBalance.cfBalance >= 0 ? theme.green : theme.red }}>¥{currentBalance.cfBalance.toLocaleString()}</span>
-            </p>
+            <h2 className={`text-xl font-bold ${theme.text} mb-1`}>月を締める</h2>
+            <p className={`text-sm ${theme.textSecondary} mb-4`}>{closingTargetMonth || currentMonth} の集計を確定します</p>
+            {(() => {
+              const tb = calculateMonthlyBalance(closingTargetMonth || currentMonth);
+              return (<>
+                <p className={`${theme.textSecondary} mb-2`}>
+                  PL（発生ベース）: <span className="font-bold" style={{ color: tb.plBalance >= 0 ? theme.green : theme.red }}>¥{tb.plBalance.toLocaleString()}</span>
+                </p>
+                <p className={`${theme.textSecondary} mb-4`}>
+                  CF（現金ベース）: <span className="font-bold" style={{ color: tb.cfBalance >= 0 ? theme.green : theme.red }}>¥{tb.cfBalance.toLocaleString()}</span>
+                </p>
+              </>);
+            })()}
 
             {budgetAnalysis.investment.needsWithdrawal && (
               <div className={`${darkMode ? 'bg-orange-900 bg-opacity-20' : 'bg-orange-50'} rounded-lg p-3 mb-4 border`} style={{ borderColor: theme.orange }}>
@@ -3745,7 +3800,7 @@ export default function BudgetSimulator() {
                 <input
                   type="range"
                   min="0"
-                  max={Math.max(currentBalance.cfBalance, simulationSettings.monthlyInvestment)}
+                  max={Math.max(calculateMonthlyBalance(closingTargetMonth || currentMonth).cfBalance, simulationSettings.monthlyInvestment)}
                   step="1000"
                   value={closeMonthData.investAmount}
                   onChange={(e) => {
@@ -3769,7 +3824,7 @@ export default function BudgetSimulator() {
                 <input
                   type="range"
                   min="0"
-                  max={currentBalance.cfBalance - closeMonthData.investAmount}
+                  max={calculateMonthlyBalance(closingTargetMonth || currentMonth).cfBalance - closeMonthData.investAmount}
                   step="1000"
                   value={closeMonthData.dryPowderAmount}
                   onChange={(e) => {
@@ -3821,7 +3876,7 @@ export default function BudgetSimulator() {
                 キャンセル
               </button>
               <button
-                onClick={closeMonth}
+                onClick={() => { closeMonth(closingTargetMonth); setClosingTargetMonth(null); }}
                 className="flex-1 px-4 py-3 rounded-xl font-bold text-white"
                 style={{ backgroundColor: theme.accent }}
               >
