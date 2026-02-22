@@ -17,6 +17,108 @@ export default function BudgetSimulator() {
     return () => clearTimeout(timer);
   }, []);
 
+  // iOSズーム防止: inputのfont-sizeを16px以上に固定 + viewport設定
+  useEffect(() => {
+    // viewport meta を maximum-scale=1 に更新
+    let vp = document.querySelector('meta[name="viewport"]');
+    if (!vp) {
+      vp = document.createElement('meta');
+      vp.name = 'viewport';
+      document.head.appendChild(vp);
+    }
+    vp.content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no';
+
+    // input/select/textarea の font-size を 16px に固定するスタイルを注入
+    const styleId = 'ios-zoom-fix';
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style');
+      style.id = styleId;
+      style.textContent = `
+        input, select, textarea {
+          font-size: 16px !important;
+        }
+        @media screen and (-webkit-min-device-pixel-ratio: 0) {
+          select, textarea, input {
+            font-size: 16px !important;
+          }
+        }
+
+        /* === スムーズアニメーション強化 === */
+
+        /* フェードイン（少し上から） */
+        @keyframes fadeSlideIn {
+          from { opacity: 0; transform: translateY(6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fadeIn {
+          animation: fadeSlideIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        /* モーダルのスライドアップ */
+        @keyframes slideUp {
+          from { opacity: 0; transform: translateY(28px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slideUp {
+          animation: slideUp 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+
+        /* ホバー・タップ時のスケール */
+        .hover-scale {
+          transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1),
+                      opacity 0.15s ease;
+        }
+        .hover-scale:active {
+          transform: scale(0.95);
+          opacity: 0.85;
+        }
+
+        /* ボタン全般のタップフィードバック */
+        button {
+          -webkit-tap-highlight-color: transparent;
+          transition: opacity 0.15s ease, transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        button:active {
+          transform: scale(0.96);
+          opacity: 0.82;
+        }
+
+        /* カードのhover */
+        .glass, .glass-dark {
+          transition: box-shadow 0.2s ease, transform 0.2s ease;
+        }
+
+        /* transition-all の duration を統一 */
+        .transition-all {
+          transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+        }
+
+        /* トグル展開のスムーズさ */
+        .duration-200 {
+          transition-duration: 220ms !important;
+          transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+        }
+        .duration-300 {
+          transition-duration: 320ms !important;
+          transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+        }
+
+        /* スクロールの慣性 */
+        .overflow-y-auto {
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+        }
+
+        /* 数値のフォント統一 */
+        .tabular-nums {
+          font-variant-numeric: tabular-nums;
+          font-feature-settings: "tnum";
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }, []);
+
   function loadFromStorage(key, defaultValue) {
     try {
       const item = localStorage.getItem(key);
@@ -130,6 +232,7 @@ export default function BudgetSimulator() {
   // 立替管理 state: { id, date, person, amount, category, memo, transactionId, settled }
   const [splitPayments, setSplitPayments] = useState(() => loadFromStorage('splitPayments', []));
   const [showSplitList, setShowSplitList] = useState(false);
+  const [showRecurringList, setShowRecurringList] = useState(false);
 
   useEffect(() => { saveToStorage('creditCards', creditCards); }, [creditCards]);
   useEffect(() => { saveToStorage('splitPayments', splitPayments); }, [splitPayments]);
@@ -570,10 +673,10 @@ export default function BudgetSimulator() {
       t.date.startsWith(yearMonth)
     );
     
-    // 投資積立タイプの定期支払いIDセット（支出から除外し資産に計上）
+    // 投資積立・積立保険タイプの定期支払いIDセット（支出から除外し資産に計上）
     const investingRecurringIds = new Set(
       recurringTransactions
-        .filter(r => r.type === 'investment' || r.type === 'fund')
+        .filter(r => r.type === 'investment' || r.type === 'fund' || r.type === 'insurance')
         .map(r => r.id)
     );
     
@@ -830,7 +933,7 @@ export default function BudgetSimulator() {
     // 今月の定期投資（確定済み）を自動的に資産に反映
     const recurringInvestIds = new Set(
       recurringTransactions
-        .filter(r => r.type === 'investment' || r.type === 'fund')
+        .filter(r => r.type === 'investment' || r.type === 'fund' || r.type === 'insurance')
         .map(r => r.id)
     );
     const settledInvestments = transactions.filter(t =>
@@ -849,13 +952,20 @@ export default function BudgetSimulator() {
       })
       .reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
+    const autoInsuranceAmount = settledInvestments
+      .filter(t => {
+        const r = recurringTransactions.find(r => r.id === t.recurringId);
+        return r && r.type === 'insurance';
+      })
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
     setAssetData(prev => {
       const prevSavings = isNaN(Number(prev.savings)) ? 0 : Number(prev.savings);
       const prevInvestments = isNaN(Number(prev.investments)) ? 0 : Number(prev.investments);
       const prevDryPowder = isNaN(Number(prev.dryPowder)) ? 0 : Number(prev.dryPowder);
       const prevNisa = isNaN(Number(prev.nisa)) ? 0 : Number(prev.nisa);
       return {
-        savings: prevSavings + actualSavings - withdrawalFromSavings,
+        savings: prevSavings + actualSavings - withdrawalFromSavings + autoInsuranceAmount,
         investments: prevInvestments + actualInvest + autoInvestAmount,
         dryPowder: prevDryPowder + actualDryPowder,
         nisa: prevNisa + autoFundAmount
@@ -911,7 +1021,7 @@ export default function BudgetSimulator() {
     // 投資積立・投資信託の定期支払いIDセット
     const investRecurringIds = new Set(
       recurringTransactions
-        .filter(r => r.type === 'investment' || r.type === 'fund')
+        .filter(r => r.type === 'investment' || r.type === 'fund' || r.type === 'insurance')
         .map(r => r.id)
     );
     const currentMonthTransactions = transactions.filter(t => 
@@ -1452,6 +1562,36 @@ export default function BudgetSimulator() {
               </div>
             )}
 
+            {/* 今月サマリー */}
+            <div className={`${theme.cardGlass} rounded-xl px-4 py-3`}>
+              <div className="flex items-center justify-between mb-2">
+                <p className={`text-xs font-semibold ${theme.textSecondary} uppercase tracking-widest`}>{currentMonth}</p>
+                {monthlyHistory[currentMonth] && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-500/15 text-green-500">締済</span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>収入</p>
+                  <p className="text-base font-bold tabular-nums" style={{ color: theme.green }}>
+                    ¥{(currentBalance.plIncome||0).toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>支出</p>
+                  <p className="text-base font-bold tabular-nums" style={{ color: theme.red }}>
+                    ¥{(currentBalance.plExpense||0).toLocaleString()}
+                  </p>
+                </div>
+                <div>
+                  <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>収支</p>
+                  <p className="text-base font-bold tabular-nums" style={{ color: (currentBalance.plBalance||0) >= 0 ? theme.green : theme.red }}>
+                    {(currentBalance.plBalance||0) >= 0 ? '+' : ''}¥{(currentBalance.plBalance||0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* 取引入力 */}
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>取引を追加</h2>
@@ -1510,16 +1650,33 @@ export default function BudgetSimulator() {
                   </>
                 )}
 
-                <div className="flex gap-2">
-                  <input type="date" value={newTransaction.date}
-                    onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-                    className={`flex-1 px-3 py-2 rounded-xl text-sm appearance-none ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
-                    style={{ colorScheme: darkMode ? 'dark' : 'light' }} />
-                  <input type="text" inputMode="numeric" placeholder="金額"
-                    value={newTransaction.amount}
-                    onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value.replace(/[^0-9]/g, '') })}
-                    className={`flex-1 px-3 py-2 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                {/* 金額入力（大きく） */}
+                <div className={`rounded-xl px-4 py-3 ${darkMode ? 'bg-neutral-800/80 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                  <p className={`text-xs font-medium ${theme.textSecondary} mb-1`}>金額</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xl font-bold ${theme.textSecondary}`}>¥</span>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={newTransaction.amount}
+                      onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value.replace(/[^0-9]/g, '') })}
+                      className={`flex-1 bg-transparent text-2xl font-bold tabular-nums ${theme.text} focus:outline-none placeholder-neutral-500`}
+                      style={{ minWidth: 0 }}
+                    />
+                    {newTransaction.amount && (
+                      <button onClick={() => setNewTransaction({...newTransaction, amount: ''})}
+                        className={`text-xs px-2 py-1 rounded-lg ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>✕</button>
+                    )}
+                  </div>
+                  {newTransaction.amount && (
+                    <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>
+                      {Number(newTransaction.amount).toLocaleString()} 円
+                    </p>
+                  )}
                 </div>
+                {/* 日付選択 */}
+                <input type="date" value={newTransaction.date}
+                  onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
+                  className={`w-full px-3 py-2.5 rounded-xl appearance-none ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                  style={{ colorScheme: darkMode ? 'dark' : 'light' }} />
 
                 <select value={newTransaction.category}
                   onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
@@ -1672,36 +1829,66 @@ export default function BudgetSimulator() {
             </div>
 
             {/* 定期支払い */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</h2>
+            <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
+              {/* ヘッダー（常時表示） */}
+              <div className="flex items-center justify-between px-4 py-3">
+                <button
+                  onClick={() => setShowRecurringList(!showRecurringList)}
+                  className="flex items-center gap-2 flex-1 text-left"
+                >
+                  <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</span>
+                  {recurringTransactions.length > 0 && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}>
+                      {recurringTransactions.length}件
+                    </span>
+                  )}
+                  <span className={`text-xs ${theme.textSecondary} ml-auto mr-2`} style={{ display:'inline-block', transform: showRecurringList ? 'rotate(180deg)' : 'rotate(0deg)', transition:'transform 0.2s' }}>▼</span>
+                </button>
                 <button onClick={() => { setEditingRecurring(null); setShowRecurringModal(true); }}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold text-white hover-scale"
+                  className="px-3 py-1 rounded-lg text-xs font-semibold text-white hover-scale shrink-0"
                   style={{ backgroundColor: theme.accent }}>+ 追加</button>
               </div>
-              {recurringTransactions.length === 0 ? (
-                <p className={`text-sm text-center py-4 ${theme.textSecondary}`}>定期支払いを追加してください</p>
-              ) : (
-                <div className="space-y-2">
-                  {recurringTransactions.map((r, idx) => (
-                    <div key={r.id} className={`flex items-center p-2.5 ${darkMode?'bg-neutral-800/60 border border-neutral-700':'bg-neutral-50'} rounded-xl`}>
-                      <span className="text-base mr-2.5">{r.type==='investment'||r.type==='fund'?'📈':'🔄'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-medium ${theme.text} truncate`}>{r.name}</p>
-                        <p className={`text-xs ${theme.textSecondary}`}>
-                          毎月{r.day}日
-                          {(r.type==='investment'||r.type==='fund') && (
-                            <span className="ml-1.5 px-1 py-0.5 rounded text-[9px] font-bold" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>投資</span>
-                          )}
-                        </p>
-                      </div>
-                      <p className="text-sm font-bold tabular-nums mr-2" style={{ color: r.type==='investment'||r.type==='fund'?'#a855f7':(darkMode ? '#e5e5e5' : '#171717') }}>
-                        ¥{r.amount.toLocaleString()}
-                      </p>
-                      <button onClick={() => { setEditingRecurring(r); setShowRecurringModal(true); }} className="p-1 text-blue-500 hover:scale-110 transition-transform">✏️</button>
-                      <button onClick={() => deleteRecurring(r.id)} className="p-1 text-red-500 hover:scale-110 transition-transform">🗑️</button>
+
+              {/* 展開コンテンツ */}
+              {showRecurringList && (
+                <div className={`border-t ${theme.border} animate-fadeIn`}>
+                  {recurringTransactions.length === 0 ? (
+                    <p className={`text-sm text-center py-4 ${theme.textSecondary}`}>定期支払いを追加してください</p>
+                  ) : (
+                    <div className="divide-y" style={{ borderColor: darkMode ? '#2a2a2a' : '#f0f0f0' }}>
+                      {recurringTransactions.map((r) => (
+                        <div key={r.id} className={`flex items-center px-4 py-3 ${darkMode ? 'hover:bg-neutral-800/40' : 'hover:bg-neutral-50'} transition-all`}>
+                          <span className="text-base mr-3">
+                            {r.type==='investment' ? '📈' : r.type==='fund' ? '📊' : r.type==='insurance' ? '🛡️' : '🔄'}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium ${theme.text} truncate`}>{r.name}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              <span className={`text-xs ${theme.textSecondary}`}>毎月{r.day}日</span>
+                              {r.type === 'investment' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>投資積立</span>
+                              )}
+                              {r.type === 'fund' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor:'rgba(16,185,129,0.15)', color:'#10b981' }}>投資信託</span>
+                              )}
+                              {r.type === 'insurance' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold" style={{ backgroundColor:'rgba(59,130,246,0.15)', color:'#3b82f6' }}>積立保険</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-sm font-bold tabular-nums mr-3" style={{
+                            color: r.type==='investment' ? '#a855f7' : r.type==='fund' ? '#10b981' : r.type==='insurance' ? '#3b82f6' : (darkMode ? '#e5e5e5' : '#171717')
+                          }}>
+                            ¥{r.amount.toLocaleString()}
+                          </p>
+                          <div className="flex gap-1 shrink-0">
+                            <button onClick={() => { setEditingRecurring(r); setShowRecurringModal(true); }} className="p-1.5 rounded-lg text-blue-500 hover:scale-110 transition-transform">✏️</button>
+                            <button onClick={() => deleteRecurring(r.id)} className="p-1.5 rounded-lg text-red-500 hover:scale-110 transition-transform">🗑️</button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                 </div>
               )}
             </div>
@@ -1728,7 +1915,7 @@ export default function BudgetSimulator() {
                 </button>
 
                 {showSplitList && (
-                  <div className={`border-t ${theme.border}`}>
+                  <div className={`border-t ${theme.border} animate-fadeIn`}>
                     {splitPayments.filter(s => !s.settled).map(sp => (
                       <div key={sp.id} className={`px-4 py-3 border-b ${theme.border} last:border-b-0`}>
                         {/* 人名と金額行 */}
@@ -1811,43 +1998,50 @@ export default function BudgetSimulator() {
                 <div className="space-y-1">
                   {transactions.slice(0, 10).map((t, idx) => (
                     <div key={t.id} onClick={() => setEditingTransaction(t)}
-                      className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all duration-200 hover-scale animate-fadeIn ${darkMode ? 'hover:bg-neutral-700/50' : 'hover:bg-neutral-50'}`}
-                      style={{ animationDelay: `${idx * 0.04}s` }}>
-                      <div className="flex items-center gap-2.5 flex-1">
-                        <span className="text-lg leading-none">
-                          {t.isRecurring ? (t.isInvestment ? '📈' : '🔄') : t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
-                        </span>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium ${theme.text} truncate`}>{t.category}</p>
+                      className={`flex items-center gap-3 px-1 py-2.5 rounded-xl cursor-pointer transition-all duration-200 animate-fadeIn ${darkMode ? 'hover:bg-neutral-700/30' : 'hover:bg-neutral-50'}`}
+                      style={{ animationDelay: `${idx * 0.03}s` }}>
+                      {/* アイコン */}
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-base ${
+                        t.isSettlement ? (darkMode?'bg-orange-500/15':'bg-orange-50') :
+                        t.type==='income' ? (darkMode?'bg-green-500/15':'bg-green-50') :
+                        t.paymentMethod==='credit' ? (darkMode?'bg-blue-500/15':'bg-blue-50') :
+                        (darkMode?'bg-neutral-800':'bg-neutral-100')
+                      }`}>
+                        {t.isRecurring ? (t.isInvestment ? '📈' : '🔄') : t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
+                      </div>
+                      {/* 中央テキスト */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`text-sm font-semibold ${theme.text} truncate`}>{t.category}</p>
                           {!t.settled && t.type === 'expense' && (
-                            <span className="text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor: theme.orange, color: '#000' }}>
-                              {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full font-bold" style={{ backgroundColor: t.isSettlement ? 'rgba(255,159,10,0.2)' : 'rgba(255,159,10,0.15)', color: theme.orange }}>
+                              {t.isSettlement ? '引落予定' : '未確定'}
                             </span>
-                          )}
-                          {t.isInvestment && (
-                            <span className="text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>📈投資</span>
                           )}
                           {t.isSplit && (() => {
                             const members = t.splitMembers || [];
                             const allSettled = members.length > 0 && members.every(m => m.settled);
                             const settledCount = members.filter(m => m.settled).length;
                             return (
-                              <span className={`text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block ${allSettled ? 'bg-green-500/15 text-green-500' : 'bg-blue-500/15 text-blue-400'}`}>
-                                {allSettled
-                                  ? `👥全員精算済`
-                                  : members.length > 0
-                                    ? `👥${settledCount}/${members.length}人精算済 ¥${(t.splitAmount||0).toLocaleString()}`
-                                    : `👥立替 ¥${(t.splitAmount||0).toLocaleString()}`}
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${allSettled ? 'bg-green-500/15 text-green-500' : 'bg-blue-500/15 text-blue-400'}`}>
+                                {allSettled ? '👥精算済' : `👥${settledCount}/${members.length}人`}
                               </span>
                             );
                           })()}
-                          <p className={`text-xs ${theme.textSecondary} tabular-nums`}>{t.date}</p>
+                        </div>
+                        <p className={`text-xs ${theme.textSecondary} mt-0.5 truncate`}>
+                          {t.memo ? t.memo : t.date}
+                          {t.memo && <span className="ml-1.5 opacity-60">{t.date.slice(5)}</span>}
+                        </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <p className="text-sm font-bold tabular-nums" style={{ color: t.amount >= 0 ? theme.green : (t.isInvestment ? '#a855f7' : theme.red) }}>
-                          {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
-                        </p>
+                        <div className="text-right">
+                          <p className="text-sm font-bold tabular-nums" style={{ color: t.amount >= 0 ? theme.green : (t.isSettlement ? theme.orange : t.isInvestment ? '#a855f7' : theme.red) }}>
+                            {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
+                          </p>
+                          {t.memo && <p className={`text-[10px] tabular-nums ${theme.textSecondary}`}>{t.date.slice(5)}</p>}
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -3284,6 +3478,18 @@ export default function BudgetSimulator() {
                   >
                     投資信託
                   </button>
+                  <button
+                    onClick={() => setEditingRecurring({ ...editingRecurring, type: 'insurance', paymentMethod: 'cash' })}
+                    className={`py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
+                      editingRecurring?.type === 'insurance' ? 'scale-105 shadow-md' : 'hover-scale'
+                    }`}
+                    style={{
+                      backgroundColor: editingRecurring?.type === 'insurance' ? '#3b82f6' : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                      color: editingRecurring?.type === 'insurance' ? '#fff' : theme.textSecondary
+                    }}
+                  >
+                    🛡️ 積立保険
+                  </button>
                 </div>
               </div>
 
@@ -3338,17 +3544,24 @@ export default function BudgetSimulator() {
                       }`}
                     >
                       <div className="flex items-center gap-2.5 flex-1 text-left">
-                        <span className="text-base">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm ${
+                          t.isSettlement ? (darkMode?'bg-orange-500/15':'bg-orange-50') :
+                          t.type==='income' ? (darkMode?'bg-green-500/15':'bg-green-50') :
+                          t.paymentMethod==='credit' ? (darkMode?'bg-blue-500/15':'bg-blue-50') :
+                          (darkMode?'bg-neutral-800':'bg-neutral-100')
+                        }`}>
                           {t.isRecurring ? (t.isInvestment ? '📈' : '🔄') : t.isSettlement ? '💸' : t.type === 'income' ? '💰' : (t.paymentMethod === 'credit' ? '💳' : '💵')}
-                        </span>
-                        <div className="flex-1">
-                          <p className={`text-sm font-semibold ${theme.text}`}>{t.category}</p>
-                          {t.memo && <p className={`text-xs ${theme.textSecondary} mt-0.5`}>{t.memo}</p>}
-                          {t.isSplit && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium mt-0.5 inline-block ${t.splitSettled ? 'bg-green-500/15 text-green-500' : 'bg-blue-500/15 text-blue-400'}`}>
-                              {t.splitSettled ? '👥精算済' : `👥立替 ¥${(t.splitAmount||0).toLocaleString()}`}
-                            </span>
-                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <p className={`text-sm font-semibold ${theme.text} truncate`}>{t.category}</p>
+                            {t.isSplit && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${t.splitSettled ? 'bg-green-500/15 text-green-500' : 'bg-blue-500/15 text-blue-400'}`}>
+                                {t.splitSettled ? '👥精算済' : `👥立替`}
+                              </span>
+                            )}
+                          </div>
+                          {t.memo && <p className={`text-xs ${theme.textSecondary} mt-0.5 truncate`}>{t.memo}</p>}
                           {!t.settled && t.type === 'expense' && (
                             <span className="text-xs px-1.5 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor: theme.orange, color: '#000' }}>
                               {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
@@ -3713,7 +3926,7 @@ export default function BudgetSimulator() {
       )}
       {showLifeEventModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
+          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
             <div className="flex items-center justify-between mb-4">
               <h2 className={`text-xl font-bold ${theme.text}`}>
                 {editingLifeEvent ? 'イベントを編集' : 'ライフイベントを追加'}
@@ -4035,77 +4248,6 @@ export default function BudgetSimulator() {
                 )}
               </div>
 
-              {/* データ管理 */}
-              <div>
-                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>データ管理</p>
-                <div className="space-y-2">
-                  <div
-                    className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium border-2 cursor-pointer transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
-                    onClick={() => document.getElementById('import-file-input').click()}
-                  >
-                    📁 CSVをインポート
-                  </div>
-                  <input
-                    id="import-file-input"
-                    type="file"
-                    accept=".csv,.json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (ev) => {
-                        try {
-                          const raw = ev.target.result;
-                          if (file.name.endsWith('.json')) {
-                            const d = JSON.parse(raw);
-                            if (d.transactions) setTransactions(d.transactions);
-                            if (d.assetData) setAssetData(d.assetData);
-                            alert('インポートが完了しました！');
-                          } else if (file.name.endsWith('.csv')) {
-                            const lines = raw.split('\n');
-                            const imported = [];
-                            for (let i = 1; i < lines.length; i++) {
-                              const line = lines[i].trim();
-                              if (!line) continue;
-                              const [dt, cat, amt, tp] = line.split(',');
-                              if (!dt || !cat || !amt) continue;
-                              imported.push({ id: Date.now() + i, date: dt.trim(), category: cat.trim(), amount: parseFloat(amt.trim()), type: tp?.trim() === 'income' ? 'income' : 'expense', settled: true });
-                            }
-                            if (imported.length > 0) {
-                              setTransactions([...imported, ...transactions]);
-                              alert(imported.length + '件インポートしました！');
-                            }
-                          }
-                        } catch(err) { alert('インポートに失敗しました'); }
-                      };
-                      reader.readAsText(file);
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const data = JSON.stringify({ transactions, assetData, monthlyBudget, recurringTransactions, lifeEvents, simulationSettings }, null, 2);
-                      const blob = new Blob([data], { type: 'application/json' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = 'money_planner_backup.json';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                    className={`w-full py-3 rounded-xl text-sm font-medium border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
-                  >
-                    💾 データをバックアップ
-                  </button>
-                  <button
-                    onClick={resetAllData}
-                    className="w-full py-3 rounded-xl text-sm font-semibold text-red-500 border-2 border-red-500/30 transition-all hover-scale"
-                  >
-                    🗑️ 全データをリセット
-                  </button>
-                </div>
-              </div>
-
               {/* クレジットカード管理 */}
               <div>
                 <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>クレジットカード</p>
@@ -4180,6 +4322,77 @@ export default function BudgetSimulator() {
                     className={`w-full py-2.5 rounded-xl text-sm font-semibold border-dashed border-2 transition-all ${darkMode ? 'border-neutral-600 text-neutral-400 hover:border-blue-500 hover:text-blue-400' : 'border-neutral-300 text-neutral-500 hover:border-blue-400 hover:text-blue-500'}`}
                   >
                     ＋ カードを追加
+                  </button>
+                </div>
+              </div>
+
+              {/* データ管理 */}
+              <div>
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>データ管理</p>
+                <div className="space-y-2">
+                  <div
+                    className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium border-2 cursor-pointer transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
+                    onClick={() => document.getElementById('import-file-input').click()}
+                  >
+                    📁 CSVをインポート
+                  </div>
+                  <input
+                    id="import-file-input"
+                    type="file"
+                    accept=".csv,.json"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        try {
+                          const raw = ev.target.result;
+                          if (file.name.endsWith('.json')) {
+                            const d = JSON.parse(raw);
+                            if (d.transactions) setTransactions(d.transactions);
+                            if (d.assetData) setAssetData(d.assetData);
+                            alert('インポートが完了しました！');
+                          } else if (file.name.endsWith('.csv')) {
+                            const lines = raw.split('\n');
+                            const imported = [];
+                            for (let i = 1; i < lines.length; i++) {
+                              const line = lines[i].trim();
+                              if (!line) continue;
+                              const [dt, cat, amt, tp] = line.split(',');
+                              if (!dt || !cat || !amt) continue;
+                              imported.push({ id: Date.now() + i, date: dt.trim(), category: cat.trim(), amount: parseFloat(amt.trim()), type: tp?.trim() === 'income' ? 'income' : 'expense', settled: true });
+                            }
+                            if (imported.length > 0) {
+                              setTransactions([...imported, ...transactions]);
+                              alert(imported.length + '件インポートしました！');
+                            }
+                          }
+                        } catch(err) { alert('インポートに失敗しました'); }
+                      };
+                      reader.readAsText(file);
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const data = JSON.stringify({ transactions, assetData, monthlyBudget, recurringTransactions, lifeEvents, simulationSettings }, null, 2);
+                      const blob = new Blob([data], { type: 'application/json' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'money_planner_backup.json';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className={`w-full py-3 rounded-xl text-sm font-medium border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
+                  >
+                    💾 データをバックアップ
+                  </button>
+                  <button
+                    onClick={resetAllData}
+                    className="w-full py-3 rounded-xl text-sm font-semibold text-red-500 border-2 border-red-500/30 transition-all hover-scale"
+                  >
+                    🗑️ 全データをリセット
                   </button>
                 </div>
               </div>
@@ -4313,7 +4526,7 @@ export default function BudgetSimulator() {
 
       {editingTransaction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
+          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
             <h2 className={`text-xl font-bold ${theme.text} mb-4`}>
               {editingTransaction.isSettlement ? 'クレカ引落予定' : '取引を編集'}
             </h2>
@@ -4478,7 +4691,14 @@ export default function BudgetSimulator() {
         </div>
       )}
 
-      <div className={`fixed bottom-0 left-0 right-0 ${darkMode ? 'bg-neutral-900' : 'bg-white'} border-t ${theme.border} transition-colors duration-300`} style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+      <div className="fixed bottom-0 left-0 right-0 transition-colors duration-300"
+        style={{
+          backgroundColor: darkMode ? 'rgba(17,17,17,0.94)' : 'rgba(255,255,255,0.94)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'}`,
+          paddingBottom: 'env(safe-area-inset-bottom)'
+        }}>
         <div className="max-w-md mx-auto flex">
           {[
             { id: 'home', icon: <DollarSign size={20} />, label: '家計簿' },
