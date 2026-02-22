@@ -114,8 +114,16 @@ export default function BudgetSimulator() {
     type: 'expense',
     paymentMethod: 'credit',
     date: new Date().toISOString().slice(0, 10),
-    memo: ''
+    memo: '',
+    isSplit: false,
+    splitMembers: []
   });
+
+  // 立替管理 state: { id, date, person, amount, category, memo, transactionId, settled }
+  const [splitPayments, setSplitPayments] = useState(() => loadFromStorage('splitPayments', []));
+  const [showSplitList, setShowSplitList] = useState(false);
+
+  useEffect(() => { saveToStorage('splitPayments', splitPayments); }, [splitPayments]);
 
   const [simulationSettings, setSimulationSettings] = useState(() =>
     loadFromStorage('simulationSettings', {
@@ -543,9 +551,21 @@ export default function BudgetSimulator() {
       .filter(t => t.amount > 0 && !t.isSettlement)
       .reduce((sum, t) => sum + t.amount, 0);
     
+    // 立替分（他人の支払い部分）は自分の支出ではないのでPLから除外
+    // まだ精算されていないメンバーの分だけ除外
     const plExpense = Math.abs(monthTransactions
       .filter(t => t.amount < 0 && !t.isSettlement && !investingRecurringIds.has(t.recurringId))
-      .reduce((sum, t) => sum + t.amount, 0));
+      .reduce((sum, t) => {
+        let unsettledSplit = 0;
+        if (t.isSplit && t.splitMembers) {
+          unsettledSplit = t.splitMembers
+            .filter(m => !m.settled)
+            .reduce((s, m) => s + Number(m.amount), 0);
+        } else if (t.isSplit && !t.splitSettled) {
+          unsettledSplit = t.splitAmount || 0;
+        }
+        return sum + t.amount + unsettledSplit;
+      }, 0));
     
     // 投資積立（定期）：支出ではなく資産振替としてカウント
     const investmentTransfer = Math.abs(monthTransactions
@@ -685,6 +705,10 @@ export default function BudgetSimulator() {
       ? -Math.abs(Number(newTransaction.amount))
       : Math.abs(Number(newTransaction.amount));
   
+    // 立替がある場合：全メンバーの合計立替額を計算
+    const validMembers = (newTransaction.isSplit ? newTransaction.splitMembers : [])
+      .filter(m => m.name.trim() && Number(m.amount) > 0);
+    const splitTotalAmt = validMembers.reduce((sum, m) => sum + Number(m.amount), 0);
     const transaction = {
       id: Date.now(),
       date: newTransaction.date,
@@ -694,7 +718,10 @@ export default function BudgetSimulator() {
       type: newTransaction.type,
       paymentMethod: newTransaction.type === 'income' ? undefined : newTransaction.paymentMethod,
       settled: newTransaction.type === 'income' ? true : (newTransaction.paymentMethod === 'cash'),
-      isSettlement: false
+      isSettlement: false,
+      isSplit: validMembers.length > 0,
+      splitAmount: splitTotalAmt,
+      splitMembers: validMembers
     };
   
     // クレジット取引の場合、翌月26日に引き落とし予約を自動作成
@@ -718,13 +745,32 @@ export default function BudgetSimulator() {
       setTransactions([transaction, ...transactions]);
     }
   
+    // 立替がある場合、人ごとに未回収リストに追加
+    if (validMembers.length > 0) {
+      setSplitPayments(prev => [
+        ...prev,
+        ...validMembers.map((m, i) => ({
+          id: Date.now() + 2 + i,
+          date: newTransaction.date,
+          person: m.name.trim(),
+          amount: Number(m.amount),
+          category: newTransaction.category,
+          memo: newTransaction.memo || '',
+          transactionId: transaction.id,
+          settled: false
+        }))
+      ]);
+    }
+
     setNewTransaction({ 
       amount: '', 
       category: '', 
       type: 'expense', 
       paymentMethod: 'credit',
       date: new Date().toISOString().slice(0, 10),
-      memo: ''
+      memo: '',
+      isSplit: false,
+      splitMembers: []
     });
   };
 
@@ -800,6 +846,8 @@ export default function BudgetSimulator() {
 
   const deleteTransaction = (id) => {
     setTransactions(transactions.filter(t => t.id !== id));
+    // 対応する立替レコードも削除（孤立防止）
+    setSplitPayments(prev => prev.filter(s => s.transactionId !== id));
   };
 
   const updateTransaction = (updatedTransaction) => {
@@ -1425,6 +1473,111 @@ export default function BudgetSimulator() {
                   } focus:outline-none focus:border-blue-500`}
                 ></textarea>
 
+                {/* 立替あり トグル */}
+                {newTransaction.type === 'expense' && (
+                  <div className={`rounded-xl overflow-hidden border ${darkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                    <button
+                      onClick={() => setNewTransaction({
+                        ...newTransaction,
+                        isSplit: !newTransaction.isSplit,
+                        splitMembers: !newTransaction.isSplit ? [{ name: '', amount: '' }] : []
+                      })}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium transition-all ${
+                        newTransaction.isSplit
+                          ? (darkMode ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-50 text-blue-700')
+                          : (darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-50 text-neutral-500')
+                      }`}
+                    >
+                      <span>👥 複数人分を立替払い</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${newTransaction.isSplit ? 'bg-blue-500 text-white' : (darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500')}`}>
+                        {newTransaction.isSplit ? `${newTransaction.splitMembers.filter(m=>m.name||m.amount).length}人` : 'OFF'}
+                      </span>
+                    </button>
+
+                    {newTransaction.isSplit && (
+                      <div className={`px-3 pb-3 pt-2 space-y-2 ${darkMode ? 'bg-neutral-800/50' : 'bg-blue-50/50'}`}>
+                        <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                          立替分は回収するまでPLから除外されます。人ごとに管理されます。
+                        </p>
+
+                        {/* 人ごとの入力行 */}
+                        <div className="space-y-1.5">
+                          {newTransaction.splitMembers.map((member, idx) => (
+                            <div key={idx} className="flex gap-1.5 items-center">
+                              <input
+                                type="text"
+                                placeholder={`${idx+1}人目の名前`}
+                                value={member.name}
+                                onChange={(e) => {
+                                  const updated = [...newTransaction.splitMembers];
+                                  updated[idx] = { ...updated[idx], name: e.target.value };
+                                  setNewTransaction({ ...newTransaction, splitMembers: updated });
+                                }}
+                                className={`flex-1 px-2.5 py-1.5 rounded-lg text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-300 placeholder-neutral-400'} focus:outline-none`}
+                              />
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="金額"
+                                value={member.amount}
+                                onChange={(e) => {
+                                  const updated = [...newTransaction.splitMembers];
+                                  updated[idx] = { ...updated[idx], amount: e.target.value.replace(/[^0-9]/g, '') };
+                                  setNewTransaction({ ...newTransaction, splitMembers: updated });
+                                }}
+                                className={`w-24 px-2.5 py-1.5 rounded-lg text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-300 placeholder-neutral-400'} focus:outline-none`}
+                              />
+                              {newTransaction.splitMembers.length > 1 && (
+                                <button
+                                  onClick={() => setNewTransaction({
+                                    ...newTransaction,
+                                    splitMembers: newTransaction.splitMembers.filter((_, i) => i !== idx)
+                                  })}
+                                  className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold shrink-0 ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-500'}`}
+                                >✕</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 人を追加ボタン */}
+                        <button
+                          onClick={() => setNewTransaction({
+                            ...newTransaction,
+                            splitMembers: [...newTransaction.splitMembers, { name: '', amount: '' }]
+                          })}
+                          className={`w-full py-1.5 rounded-lg text-xs font-semibold border-dashed border-2 transition-all ${darkMode ? 'border-neutral-600 text-neutral-400 hover:border-blue-500 hover:text-blue-400' : 'border-neutral-300 text-neutral-400 hover:border-blue-400 hover:text-blue-500'}`}
+                        >
+                          ＋ 人を追加
+                        </button>
+
+                        {/* 内訳サマリー */}
+                        {(() => {
+                          const total = Number(newTransaction.amount) || 0;
+                          const splitTotal = newTransaction.splitMembers.reduce((s, m) => s + (Number(m.amount) || 0), 0);
+                          const mine = total - splitTotal;
+                          if (total === 0) return null;
+                          return (
+                            <div className={`rounded-lg px-3 py-2 text-xs space-y-0.5 ${darkMode ? 'bg-neutral-900/60' : 'bg-white/80'}`}>
+                              <div className="flex justify-between">
+                                <span className={theme.textSecondary}>合計</span>
+                                <span className={`font-bold tabular-nums ${theme.text}`}>¥{total.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className={theme.textSecondary}>立替合計（{newTransaction.splitMembers.filter(m=>Number(m.amount)>0).length}人）</span>
+                                <span className="font-bold tabular-nums" style={{color: theme.accent}}>¥{splitTotal.toLocaleString()}</span>
+                              </div>
+                              <div className={`flex justify-between pt-1 border-t ${theme.border}`}>
+                                <span className={`font-semibold ${theme.text}`}>自分の負担</span>
+                                <span className={`font-bold tabular-nums`} style={{color: mine >= 0 ? theme.green : theme.red}}>¥{mine.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                )}
                 <button onClick={addTransaction}
                   className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
                   style={{ backgroundColor: theme.accent }}>
@@ -1468,6 +1621,92 @@ export default function BudgetSimulator() {
               )}
             </div>
 
+            {/* 立替待ち */}
+            {splitPayments.filter(s => !s.settled).length > 0 && (
+              <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
+                {/* ヘッダー：常時表示 */}
+                <button
+                  onClick={() => setShowSplitList(!showSplitList)}
+                  className={`w-full flex items-center justify-between px-4 py-3 transition-all`}
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-base">👥</span>
+                    <span className={`text-sm font-semibold ${theme.text}`}>立替待ち</span>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-blue-500 text-white">
+                      {splitPayments.filter(s => !s.settled).length}人
+                    </span>
+                    <span className="text-sm font-bold tabular-nums" style={{ color: theme.accent }}>
+                      合計 ¥{splitPayments.filter(s => !s.settled).reduce((sum, s) => sum + s.amount, 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <span className={`text-xs ${theme.textSecondary}`} style={{ display:'inline-block', transform: showSplitList ? 'rotate(180deg)' : 'rotate(0deg)', transition:'transform 0.2s' }}>▼</span>
+                </button>
+
+                {showSplitList && (
+                  <div className={`border-t ${theme.border}`}>
+                    {splitPayments.filter(s => !s.settled).map(sp => (
+                      <div key={sp.id} className={`px-4 py-3 border-b ${theme.border} last:border-b-0`}>
+                        {/* 人名と金額行 */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm font-bold ${theme.text}`}>{sp.person}</span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-100 text-neutral-600'}`}>{sp.category}</span>
+                              <span className={`text-xs ${theme.textSecondary}`}>{sp.date}</span>
+                            </div>
+                            {sp.memo && (
+                              <p className={`text-xs ${theme.textSecondary} mt-0.5 truncate`}>{sp.memo}</p>
+                            )}
+                            <p className="text-base font-bold tabular-nums mt-1" style={{ color: theme.accent }}>
+                              ¥{sp.amount.toLocaleString()}
+                            </p>
+                          </div>
+
+                          {/* 精算ボタン */}
+                          <button
+                            onClick={() => {
+                              const settleTransaction = {
+                                id: Date.now(),
+                                date: new Date().toISOString().slice(0, 10),
+                                category: '立替回収',
+                                memo: `${sp.person}からの返金（${sp.category}）`,
+                                amount: sp.amount,
+                                type: 'income',
+                                settled: true,
+                                isSettlement: false
+                              };
+                              // 精算収入を記録 + 元取引のsplitMembersを更新
+                              setTransactions(prev => [
+                                settleTransaction,
+                                ...prev.map(t => {
+                                  if (t.id !== sp.transactionId) return t;
+                                  const updatedMembers = (t.splitMembers || []).map(m =>
+                                    m.name === sp.person && !m.settled
+                                      ? { ...m, settled: true, settledDate: new Date().toISOString().slice(0, 10) }
+                                      : m
+                                  );
+                                  const allSettled = updatedMembers.every(m => m.settled);
+                                  return { ...t, splitMembers: updatedMembers, splitSettled: allSettled };
+                                })
+                              ]);
+                              setSplitPayments(prev => prev.map(s =>
+                                s.id === sp.id
+                                  ? { ...s, settled: true, settledDate: new Date().toISOString().slice(0, 10) }
+                                  : s
+                              ));
+                            }}
+                            className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold text-white hover-scale transition-all"
+                            style={{ backgroundColor: theme.green }}
+                          >
+                            精算 ✓
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             {/* 最近の取引 */}
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <div className="flex items-center justify-between mb-3">
@@ -1503,6 +1742,20 @@ export default function BudgetSimulator() {
                           {t.isInvestment && (
                             <span className="text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor:'rgba(168,85,247,0.15)', color:'#a855f7' }}>📈投資</span>
                           )}
+                          {t.isSplit && (() => {
+                            const members = t.splitMembers || [];
+                            const allSettled = members.length > 0 && members.every(m => m.settled);
+                            const settledCount = members.filter(m => m.settled).length;
+                            return (
+                              <span className={`text-xs px-2 py-0.5 rounded font-medium mt-0.5 inline-block ${allSettled ? 'bg-green-500/15 text-green-500' : 'bg-blue-500/15 text-blue-400'}`}>
+                                {allSettled
+                                  ? `👥全員精算済`
+                                  : members.length > 0
+                                    ? `👥${settledCount}/${members.length}人精算済 ¥${(t.splitAmount||0).toLocaleString()}`
+                                    : `👥立替 ¥${(t.splitAmount||0).toLocaleString()}`}
+                              </span>
+                            );
+                          })()}
                           <p className={`text-xs ${theme.textSecondary} tabular-nums`}>{t.date}</p>
                         </div>
                       </div>
@@ -3006,6 +3259,11 @@ export default function BudgetSimulator() {
                         <div className="flex-1">
                           <p className={`text-sm font-semibold ${theme.text}`}>{t.category}</p>
                           {t.memo && <p className={`text-xs ${theme.textSecondary} mt-0.5`}>{t.memo}</p>}
+                          {t.isSplit && (
+                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium mt-0.5 inline-block ${t.splitSettled ? 'bg-green-500/15 text-green-500' : 'bg-blue-500/15 text-blue-400'}`}>
+                              {t.splitSettled ? '👥精算済' : `👥立替 ¥${(t.splitAmount||0).toLocaleString()}`}
+                            </span>
+                          )}
                           {!t.settled && t.type === 'expense' && (
                             <span className="text-xs px-1.5 py-0.5 rounded font-medium mt-0.5 inline-block" style={{ backgroundColor: theme.orange, color: '#000' }}>
                               {t.isSettlement ? '💸引落予定' : t.paymentMethod === 'credit' ? '💳クレジット' : '予定'}
@@ -3098,7 +3356,10 @@ export default function BudgetSimulator() {
                         type: newTransaction.type,
                         paymentMethod: newTransaction.type === 'income' ? undefined : newTransaction.paymentMethod,
                         settled: newTransaction.type === 'income' ? true : (newTransaction.paymentMethod === 'cash'),
-                        isSettlement: false
+                        isSettlement: false,
+                        isSplit: false,
+                        splitAmount: 0,
+                        splitMembers: []
                       };
                       if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
                         const sd = new Date(selectedDate);
@@ -3107,7 +3368,7 @@ export default function BudgetSimulator() {
                       } else {
                         setTransactions([t, ...transactions]);
                       }
-                      setNewTransaction({ amount: '', category: '', type: 'expense', paymentMethod: 'credit', date: new Date().toISOString().slice(0, 10), memo: '' });
+                      setNewTransaction({ amount: '', category: '', type: 'expense', paymentMethod: 'credit', date: new Date().toISOString().slice(0, 10), memo: '', isSplit: false, splitMembers: [] });
                     }}
                     className="w-full py-2.5 rounded-xl font-semibold text-white transition-all hover-scale"
                     style={{ backgroundColor: theme.accent }}>
@@ -3782,7 +4043,7 @@ export default function BudgetSimulator() {
               </>);
             })()}
 
-            {budgetAnalysis.investment.needsWithdrawal && (
+            {budgetAnalysis.investment.needsWithdrawal && (!closingTargetMonth || closingTargetMonth === currentMonth) && (
               <div className={`${darkMode ? 'bg-orange-900 bg-opacity-20' : 'bg-orange-50'} rounded-lg p-3 mb-4 border`} style={{ borderColor: theme.orange }}>
                 <p className={`text-sm font-semibold mb-1`} style={{ color: theme.orange }}>⚠ 投資計画のお知らせ</p>
                 <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-orange-700'}`}>
@@ -3973,6 +4234,35 @@ export default function BudgetSimulator() {
                   } focus:outline-none`}
                 />
               </div>
+
+              {editingTransaction.isSplit && (
+                <div className={`rounded-lg px-4 py-3 ${darkMode ? 'bg-neutral-800' : 'bg-blue-50'}`}>
+                  <p className={`text-xs font-bold mb-2 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>👥 立替払いの内訳</p>
+                  <div className="space-y-1.5">
+                    {(editingTransaction.splitMembers || []).map((m, i) => (
+                      <div key={i} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-medium ${theme.text}`}>{m.name}</span>
+                          {m.settled && <span className="text-xs text-green-500 font-bold">✅精算済</span>}
+                          {!m.settled && <span className={`text-xs ${theme.textSecondary}`}>⏳未回収</span>}
+                        </div>
+                        <span className="text-sm font-bold tabular-nums" style={{ color: m.settled ? theme.green : theme.accent }}>
+                          ¥{Number(m.amount).toLocaleString()}
+                        </span>
+                      </div>
+                    ))}
+                    <div className={`flex justify-between pt-1.5 border-t ${theme.border}`}>
+                      <span className={`text-xs font-semibold ${theme.text}`}>立替合計</span>
+                      <span className="text-sm font-bold tabular-nums" style={{ color: theme.accent }}>
+                        ¥{(editingTransaction.splitAmount || 0).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                  {!editingTransaction.splitSettled && (
+                    <p className={`text-xs mt-2 ${theme.textSecondary}`}>⏳ ホームの「立替待ち」リストから人ごとに精算できます</p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-4 gap-2 mt-6">
