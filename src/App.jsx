@@ -116,13 +116,22 @@ export default function BudgetSimulator() {
     date: new Date().toISOString().slice(0, 10),
     memo: '',
     isSplit: false,
-    splitMembers: []
+    splitMembers: [],
+    cardId: null
   });
+
+  // クレジットカード設定 state: { id, name, closingDay, paymentDay }
+  // closingDay: 締め日, paymentDay: 引き落とし日（翌月or翌々月かも設定）
+  const [creditCards, setCreditCards] = useState(() => loadFromStorage('creditCards', [
+    { id: 1, name: 'メインカード', closingDay: 15, paymentMonth: 1, paymentDay: 10 }
+  ]));
+  const [selectedCardId, setSelectedCardId] = useState(1);
 
   // 立替管理 state: { id, date, person, amount, category, memo, transactionId, settled }
   const [splitPayments, setSplitPayments] = useState(() => loadFromStorage('splitPayments', []));
   const [showSplitList, setShowSplitList] = useState(false);
 
+  useEffect(() => { saveToStorage('creditCards', creditCards); }, [creditCards]);
   useEffect(() => { saveToStorage('splitPayments', splitPayments); }, [splitPayments]);
 
   const [simulationSettings, setSimulationSettings] = useState(() =>
@@ -482,6 +491,10 @@ export default function BudgetSimulator() {
       if (t.isRecurring && !t.settled && t.paymentMethod === 'cash' && t.date <= todayStr) {
         return { ...t, settled: true };
       }
+      // クレカ引き落とし予約で引き落とし日が今日以前なら確定に変更（CFに反映）
+      if (t.isSettlement && !t.settled && t.date <= todayStr) {
+        return { ...t, settled: true };
+      }
       return t;
     }));
   };
@@ -534,6 +547,24 @@ export default function BudgetSimulator() {
       });
     }
   };
+  // カードIDから引き落とし日を計算するヘルパー
+  const getSettlementDate = (txDate, cardId) => {
+    const card = creditCards.find(c => c.id === cardId) || creditCards[0];
+    if (!card) return new Date(new Date(txDate).getFullYear(), new Date(txDate).getMonth() + 1, 26);
+    const d = new Date(txDate);
+    // 締め日を超えていたら翌月締め → 引き落としはさらにpaymentMonthヶ月後
+    const closingDay = card.closingDay;
+    const paymentMonth = card.paymentMonth ?? 1; // 1=翌月, 2=翌々月
+    const paymentDay = card.paymentDay;
+    let billingMonth = d.getMonth(); // 0-indexed
+    if (d.getDate() > closingDay) {
+      billingMonth += 1; // 翌月締め
+    }
+    const payYear = d.getFullYear() + Math.floor((billingMonth + paymentMonth) / 12);
+    const payMonth = (billingMonth + paymentMonth) % 12;
+    return new Date(payYear, payMonth, paymentDay);
+  };
+
   const calculateMonthlyBalance = (yearMonth) => {
     const monthTransactions = transactions.filter(t => 
       t.date.startsWith(yearMonth)
@@ -719,27 +750,28 @@ export default function BudgetSimulator() {
       paymentMethod: newTransaction.type === 'income' ? undefined : newTransaction.paymentMethod,
       settled: newTransaction.type === 'income' ? true : (newTransaction.paymentMethod === 'cash'),
       isSettlement: false,
+      cardId: newTransaction.paymentMethod === 'credit' ? (newTransaction.cardId || (creditCards[0]?.id)) : undefined,
       isSplit: validMembers.length > 0,
       splitAmount: splitTotalAmt,
       splitMembers: validMembers
     };
   
-    // クレジット取引の場合、翌月26日に引き落とし予約を自動作成
+    // クレジット取引の場合、カード設定に基づいて引き落とし予約を自動作成
     if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
-      const transactionDate = new Date(newTransaction.date);
-      const settlementDate = new Date(transactionDate.getFullYear(), transactionDate.getMonth() + 1, 26);
-      
+      const settlementDate = getSettlementDate(newTransaction.date, newTransaction.cardId);
+      const card = creditCards.find(c => c.id === newTransaction.cardId);
       const settlementTransaction = {
         id: Date.now() + 1,
         date: settlementDate.toISOString().slice(0, 10),
-        category: 'クレジット引き落とし',
+        category: `クレカ引落${card ? `（${card.name}）` : ''}`,
         amount: amount,
         type: 'expense',
         paymentMethod: 'cash',
-        settled: false,
-        isSettlement: true
+        settled: settlementDate <= new Date(), // 引き落とし日が過去ならすぐ確定
+        isSettlement: true,
+        parentTransactionId: transaction.id, // 元取引との紐づけ
+        cardId: newTransaction.cardId
       };
-      
       setTransactions([transaction, settlementTransaction, ...transactions]);
     } else {
       setTransactions([transaction, ...transactions]);
@@ -770,7 +802,8 @@ export default function BudgetSimulator() {
       date: new Date().toISOString().slice(0, 10),
       memo: '',
       isSplit: false,
-      splitMembers: []
+      splitMembers: [],
+      cardId: null
     });
   };
 
@@ -851,9 +884,26 @@ export default function BudgetSimulator() {
   };
 
   const updateTransaction = (updatedTransaction) => {
-    setTransactions(transactions.map(t => 
-      t.id === updatedTransaction.id ? updatedTransaction : t
-    ));
+    setTransactions(prev => prev.map(t => {
+      if (t.id === updatedTransaction.id) return updatedTransaction;
+      // 元取引に紐づく引き落とし予約を金額・カード情報に合わせて更新
+      if (t.isSettlement && t.parentTransactionId === updatedTransaction.id) {
+        const newSettlementDate = getSettlementDate(
+          updatedTransaction.date,
+          updatedTransaction.cardId
+        );
+        const card = creditCards.find(c => c.id === updatedTransaction.cardId);
+        return {
+          ...t,
+          amount: updatedTransaction.amount, // 元取引の金額変更に追従
+          date: newSettlementDate.toISOString().slice(0, 10),
+          category: `クレカ引落${card ? `（${card.name}）` : ''}`,
+          settled: newSettlementDate <= new Date(),
+          cardId: updatedTransaction.cardId
+        };
+      }
+      return t;
+    }));
     setEditingTransaction(null);
   };
 
@@ -1425,22 +1475,39 @@ export default function BudgetSimulator() {
                 </div>
 
                 {newTransaction.type === 'expense' && (
-                  <div className="flex gap-2">
-                    {[
-                      { key: 'credit', label: '💳 クレジット' },
-                      { key: 'cash', label: '💵 現金' },
-                    ].map(({ key, label }) => (
-                      <button key={key}
-                        onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: key })}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200`}
-                        style={{
-                          backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#262626' : '#f0f0f0'),
-                          color: newTransaction.paymentMethod === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
-                        }}>
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <>
+                    <div className="flex gap-2">
+                      {[
+                        { key: 'credit', label: '💳 クレジット' },
+                        { key: 'cash', label: '💵 現金' },
+                      ].map(({ key, label }) => (
+                        <button key={key}
+                          onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: key, cardId: key === 'credit' ? (newTransaction.cardId || creditCards[0]?.id) : null })}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200`}
+                          style={{
+                            backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#262626' : '#f0f0f0'),
+                            color: newTransaction.paymentMethod === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {newTransaction.paymentMethod === 'credit' && creditCards.length > 1 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {creditCards.map(card => (
+                          <button key={card.id}
+                            onClick={() => setNewTransaction({ ...newTransaction, cardId: card.id })}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all`}
+                            style={{
+                              backgroundColor: (newTransaction.cardId || creditCards[0]?.id) === card.id ? theme.accent : (darkMode ? '#2a2a2a' : '#f0f0f0'),
+                              color: (newTransaction.cardId || creditCards[0]?.id) === card.id ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
+                            }}>
+                            {card.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
 
                 <div className="flex gap-2">
@@ -1496,9 +1563,27 @@ export default function BudgetSimulator() {
 
                     {newTransaction.isSplit && (
                       <div className={`px-3 pb-3 pt-2 space-y-2 ${darkMode ? 'bg-neutral-800/50' : 'bg-blue-50/50'}`}>
-                        <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                          立替分は回収するまでPLから除外されます。人ごとに管理されます。
-                        </p>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                            立替分は回収するまでPLから除外されます。
+                          </p>
+                          {newTransaction.amount && newTransaction.splitMembers.length > 0 && (
+                            <button
+                              onClick={() => {
+                                const total = Number(newTransaction.amount);
+                                const n = newTransaction.splitMembers.length + 1; // 自分も含む
+                                const perPerson = Math.floor(total / n);
+                                setNewTransaction({
+                                  ...newTransaction,
+                                  splitMembers: newTransaction.splitMembers.map(m => ({ ...m, amount: String(perPerson) }))
+                                });
+                              }}
+                              className={`text-xs px-2.5 py-1 rounded-lg font-semibold shrink-0 transition-all ${darkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-600'}`}
+                            >
+                              ÷ 均等割り
+                            </button>
+                          )}
+                        </div>
 
                         {/* 人ごとの入力行 */}
                         <div className="space-y-1.5">
@@ -4021,6 +4106,84 @@ export default function BudgetSimulator() {
                 </div>
               </div>
 
+              {/* クレジットカード管理 */}
+              <div>
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>クレジットカード</p>
+                <div className="space-y-2">
+                  {creditCards.map((card, i) => (
+                    <div key={card.id} className={`rounded-xl p-3 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} space-y-2`}>
+                      <div className="flex items-center justify-between">
+                        <input
+                          type="text"
+                          value={card.name}
+                          onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, name: e.target.value} : c))}
+                          className={`flex-1 px-2 py-1 rounded-lg text-sm font-semibold ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none mr-2`}
+                          placeholder="カード名"
+                        />
+                        {creditCards.length > 1 && (
+                          <button
+                            onClick={() => setCreditCards(prev => prev.filter(c => c.id !== card.id))}
+                            className={`w-7 h-7 flex items-center justify-center rounded-full text-xs ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-500'}`}
+                          >✕</button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className={`block text-xs ${theme.textSecondary} mb-1`}>締め日</label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number" min="1" max="31"
+                              value={card.closingDay}
+                              onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, closingDay: Number(e.target.value)} : c))}
+                              className={`w-full px-2 py-1.5 rounded-lg text-sm text-center tabular-nums ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                            />
+                            <span className={`text-xs ${theme.textSecondary} shrink-0`}>日</span>
+                          </div>
+                        </div>
+                        <div>
+                          <label className={`block text-xs ${theme.textSecondary} mb-1`}>引落月</label>
+                          <select
+                            value={card.paymentMonth ?? 1}
+                            onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, paymentMonth: Number(e.target.value)} : c))}
+                            className={`w-full px-2 py-1.5 rounded-lg text-xs ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                          >
+                            <option value={1}>翌月</option>
+                            <option value={2}>翌々月</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className={`block text-xs ${theme.textSecondary} mb-1`}>引落日</label>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number" min="1" max="31"
+                              value={card.paymentDay}
+                              onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, paymentDay: Number(e.target.value)} : c))}
+                              className={`w-full px-2 py-1.5 rounded-lg text-sm text-center tabular-nums ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                            />
+                            <span className={`text-xs ${theme.textSecondary} shrink-0`}>日</span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className={`text-xs ${theme.textSecondary}`}>
+                        {card.closingDay}日締め → {card.paymentMonth === 1 ? '翌月' : '翌々月'}{card.paymentDay}日引落
+                      </p>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() => setCreditCards(prev => [...prev, {
+                      id: Date.now(),
+                      name: `カード${prev.length + 1}`,
+                      closingDay: 15,
+                      paymentMonth: 1,
+                      paymentDay: 10
+                    }])}
+                    className={`w-full py-2.5 rounded-xl text-sm font-semibold border-dashed border-2 transition-all ${darkMode ? 'border-neutral-600 text-neutral-400 hover:border-blue-500 hover:text-blue-400' : 'border-neutral-300 text-neutral-500 hover:border-blue-400 hover:text-blue-500'}`}
+                  >
+                    ＋ カードを追加
+                  </button>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
@@ -4151,8 +4314,26 @@ export default function BudgetSimulator() {
       {editingTransaction && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto`}>
-            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>取引を編集</h2>
+            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>
+              {editingTransaction.isSettlement ? 'クレカ引落予定' : '取引を編集'}
+            </h2>
 
+            {/* 引き落とし予約は読み取り専用 */}
+            {editingTransaction.isSettlement ? (
+              <div className="space-y-3">
+                <div className={`rounded-xl p-4 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
+                  <p className={`text-xs font-bold ${theme.textSecondary} mb-3 uppercase tracking-wide`}>引き落とし情報</p>
+                  <div className="space-y-2">
+                    <div className="flex justify-between"><span className={theme.textSecondary}>カード</span><span className={`font-medium ${theme.text}`}>{creditCards.find(c=>c.id===editingTransaction.cardId)?.name || 'カード'}</span></div>
+                    <div className="flex justify-between"><span className={theme.textSecondary}>引き落とし日</span><span className={`font-medium ${theme.text}`}>{editingTransaction.date}</span></div>
+                    <div className="flex justify-between"><span className={theme.textSecondary}>金額</span><span className="font-bold tabular-nums" style={{color:theme.red}}>¥{Math.abs(editingTransaction.amount).toLocaleString()}</span></div>
+                    <div className="flex justify-between"><span className={theme.textSecondary}>状態</span><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${editingTransaction.settled ? 'bg-green-500/20 text-green-500' : 'bg-orange-500/20 text-orange-400'}`}>{editingTransaction.settled ? '引き落とし済み' : '予定'}</span></div>
+                  </div>
+                </div>
+                <p className={`text-xs text-center ${theme.textSecondary}`}>引き落とし予約は元の取引から自動生成されます。金額を変更したい場合は元の取引を編集してください。</p>
+                <button onClick={() => setEditingTransaction(null)} className={`w-full py-3 rounded-xl font-bold ${darkMode ? 'bg-neutral-800 text-white' : 'border-2 border-neutral-300 text-neutral-700'}`}>閉じる</button>
+              </div>
+            ) : (
             <div className="space-y-4">
               <div className="flex gap-2">
                 <button
@@ -4292,6 +4473,7 @@ export default function BudgetSimulator() {
                 保存
               </button>
             </div>
+            )} {/* end of else (non-settlement) */}
           </div>
         </div>
       )}
