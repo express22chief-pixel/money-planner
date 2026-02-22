@@ -139,6 +139,8 @@ export default function BudgetSimulator() {
   const [userInfo, setUserInfo] = useState(() => loadFromStorage('userInfo', null));
   const [showSettings, setShowSettings] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(!loadFromStorage('userInfo', null));
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialPage, setTutorialPage] = useState(0);
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -1566,9 +1568,18 @@ export default function BudgetSimulator() {
             <div className={`${theme.cardGlass} rounded-xl px-4 py-3`}>
               <div className="flex items-center justify-between mb-2">
                 <p className={`text-xs font-semibold ${theme.textSecondary} uppercase tracking-widest`}>{currentMonth}</p>
-                {monthlyHistory[currentMonth] && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-500/15 text-green-500">締済</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {monthlyHistory[currentMonth] && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-500/15 text-green-500">締済</span>
+                  )}
+                  <button
+                    onClick={() => { setShowTutorial(true); setTutorialPage(0); }}
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-all ${darkMode ? 'text-neutral-500 hover:text-neutral-300' : 'text-neutral-400 hover:text-neutral-600'}`}
+                    title="使い方を見る"
+                  >
+                    ❓使い方
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
@@ -2033,15 +2044,12 @@ export default function BudgetSimulator() {
                           {t.memo ? t.memo : t.date}
                           {t.memo && <span className="ml-1.5 opacity-60">{t.date.slice(5)}</span>}
                         </p>
-                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="text-right">
+                      <div className="text-right shrink-0">
                           <p className="text-sm font-bold tabular-nums" style={{ color: t.amount >= 0 ? theme.green : (t.isSettlement ? theme.orange : t.isInvestment ? '#a855f7' : theme.red) }}>
                             {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
                           </p>
                           {t.memo && <p className={`text-[10px] tabular-nums ${theme.textSecondary}`}>{t.date.slice(5)}</p>}
-                        </div>
                       </div>
                     </div>
                   ))}
@@ -4059,6 +4067,157 @@ export default function BudgetSimulator() {
         </div>
       )}
 
+
+      {/* ===== チュートリアルスライド ===== */}
+      {showTutorial && (() => {
+        const slides = [
+          {
+            emoji: '👋',
+            title: 'ようこそ！',
+            subtitle: 'お金の流れを、シンプルに管理',
+            desc: '収入・支出の記録から資産管理まで、ひとつのアプリで完結します。全部で7枚のスライドで使い方を説明します。',
+            color: '#3b82f6',
+          },
+          {
+            emoji: '💳',
+            title: '取引の記録',
+            subtitle: '支出・収入を素早く入力',
+            desc: 'ホームの「取引を追加」から入力します。クレジットカードで支払うと、翌月の引き落とし予約が自動で作られます。クレカ設定で締め日・引き落とし日を設定しましょう。',
+            color: '#a855f7',
+            tips: ['💵 現金は即確定、💳 クレカは翌月CFに反映', '支出・収入のどちらも記録できます'],
+          },
+          {
+            emoji: '📅',
+            title: 'カレンダー',
+            subtitle: '日付から取引を確認・追加',
+            desc: 'カレンダータブで日付をタップすると、その日の取引一覧が表示されます。同じ画面からその日付で直接取引を追加することもできます。',
+            color: '#10b981',
+            tips: ['日付の下の点が取引件数を示します', '過去の月のデータも確認できます'],
+          },
+          {
+            emoji: '🔄',
+            title: '定期支払い',
+            subtitle: '毎月の固定費を自動記録',
+            desc: 'ホームの「定期支払い」に家賃・光熱費などを登録すると、毎月自動で取引が追加されます。投資積立・投資信託・積立保険も登録でき、月締め時に資産へ自動反映されます。',
+            color: '#f59e0b',
+            tips: ['🔄 固定費、📈 投資積立、📊 投資信託、🛡️ 積立保険', '曜日指定・日付指定どちらも設定可能'],
+          },
+          {
+            emoji: '👥',
+            title: '立替払い',
+            subtitle: '複数人分の支払いを管理',
+            desc: '取引入力で「👥 複数人分を立替払い」をONにすると、誰にいくら立て替えたか個別に記録できます。「÷均等割り」ボタンで自動計算も。精算した人はホームの「立替待ち」から個別に精算処理できます。',
+            color: '#3b82f6',
+            tips: ['立替分は回収するまで支出から除外されます', '人ごとに個別精算できます'],
+          },
+          {
+            emoji: '💰',
+            title: '月締め・資産管理',
+            subtitle: '月末に収支を確定させよう',
+            desc: '月末に「今月を締める」ボタンを押すと収支が確定し、貯金・投資額が資産タブへ自動で反映されます。資産タブでは総資産・各カテゴリの推移をグラフで確認できます。',
+            color: '#10b981',
+            tips: ['投資積立・保険は月締め時に自動で資産に加算', '締めた月は編集できますが再締めが必要です'],
+          },
+          {
+            emoji: '⚙️',
+            title: '設定・カスタマイズ',
+            subtitle: '自分好みに整えよう',
+            desc: '右上の設定アイコンから、クレジットカードの締め日・引き落とし日の設定、カテゴリの追加・削除、予算の設定などができます。ダークモード切替もここから。',
+            color: '#6366f1',
+            tips: ['複数枚のクレカも個別設定できます', 'カテゴリは自分で追加できます'],
+          },
+        ];
+        const slide = slides[tutorialPage];
+        const isLast = tutorialPage === slides.length - 1;
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-end justify-center"
+            style={{ backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}>
+            <div className={`w-full max-w-md rounded-t-3xl animate-slideUp overflow-hidden`}
+              style={{ backgroundColor: darkMode ? '#141414' : '#ffffff', paddingBottom: 'env(safe-area-inset-bottom)' }}>
+
+              {/* プログレスバー */}
+              <div className="flex gap-1 px-5 pt-5">
+                {slides.map((_, i) => (
+                  <div key={i} className="flex-1 h-1 rounded-full overflow-hidden"
+                    style={{ backgroundColor: darkMode ? '#2a2a2a' : '#e5e7eb' }}>
+                    <div className="h-full rounded-full transition-all duration-500"
+                      style={{
+                        width: i < tutorialPage ? '100%' : i === tutorialPage ? '100%' : '0%',
+                        backgroundColor: i <= tutorialPage ? slide.color : 'transparent'
+                      }} />
+                  </div>
+                ))}
+              </div>
+
+              {/* スライドコンテンツ */}
+              <div className="px-6 pt-6 pb-4">
+                {/* 絵文字アイコン */}
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-4xl mb-4"
+                  style={{ backgroundColor: slide.color + '20' }}>
+                  {slide.emoji}
+                </div>
+
+                {/* タイトル */}
+                <p className={`text-xs font-bold uppercase tracking-widest mb-1`} style={{ color: slide.color }}>
+                  {slide.subtitle}
+                </p>
+                <h2 className={`text-2xl font-bold mb-3 ${darkMode ? 'text-white' : 'text-neutral-900'}`}>
+                  {slide.title}
+                </h2>
+                <p className={`text-sm leading-relaxed mb-4 ${darkMode ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                  {slide.desc}
+                </p>
+
+                {/* Tipsリスト */}
+                {slide.tips && (
+                  <div className="space-y-1.5 mb-4">
+                    {slide.tips.map((tip, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-xs mt-0.5" style={{ color: slide.color }}>●</span>
+                        <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>{tip}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ボタン */}
+              <div className="flex gap-3 px-6 pb-6">
+                {tutorialPage > 0 && (
+                  <button
+                    onClick={() => setTutorialPage(p => p - 1)}
+                    className={`flex-1 py-3 rounded-xl font-semibold text-sm ${darkMode ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-100 text-neutral-600'}`}
+                  >
+                    ← 戻る
+                  </button>
+                )}
+                <button
+                  onClick={() => {
+                    if (isLast) { setShowTutorial(false); }
+                    else { setTutorialPage(p => p + 1); }
+                  }}
+                  className="flex-1 py-3 rounded-xl font-bold text-white text-sm transition-all hover-scale"
+                  style={{ backgroundColor: slide.color }}
+                >
+                  {isLast ? '✓ はじめる' : `次へ (${tutorialPage + 1}/${slides.length})`}
+                </button>
+              </div>
+
+              {/* スキップ */}
+              {!isLast && (
+                <button
+                  onClick={() => setShowTutorial(false)}
+                  className={`w-full pb-3 text-xs text-center ${darkMode ? 'text-neutral-600' : 'text-neutral-400'}`}
+                >
+                  スキップ
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {showOnboarding && (
         <div className={`fixed inset-0 ${darkMode ? 'bg-black' : 'bg-neutral-900'} flex items-center justify-center p-4 z-50 animate-fadeIn`}>
           <div className={`${theme.cardGlass} rounded-3xl p-8 max-w-md w-full max-h-[90vh] overflow-y-auto animate-slideUp`}>
@@ -4178,6 +4337,8 @@ export default function BudgetSimulator() {
                   return;
                 }
                 setShowOnboarding(false);
+                setShowTutorial(true);
+                setTutorialPage(0);
               }}
               className="w-full mt-6 py-4 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
               style={{ backgroundColor: theme.accent }}
