@@ -1615,9 +1615,11 @@ export default function BudgetSimulator() {
             {/* 今月サマリー：スワイプで月切替 + 収支バー */}
             {(() => {
               const today = new Date();
+              // toISOString()はUTC変換でJSTが1日ずれるためローカル時刻で計算
+              const toYM = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
               const targetDate = new Date(today.getFullYear(), today.getMonth() + summaryMonthOffset, 1);
-              const targetMonth = targetDate.toISOString().slice(0, 7);
-              const currentMonth = today.toISOString().slice(0, 7);
+              const targetMonth = toYM(targetDate);
+              const currentMonth = toYM(today);
               const isCurrentMonth = targetMonth === currentMonth;
 
               const bal = calculateMonthlyBalance(targetMonth);
@@ -1644,7 +1646,8 @@ export default function BudgetSimulator() {
                   onTouchStart={e => { e.currentTarget._startX = e.touches[0].clientX; }}
                   onTouchEnd={e => {
                     const dx = e.changedTouches[0].clientX - (e.currentTarget._startX || 0);
-                    if (Math.abs(dx) > 40) setSummaryMonthOffset(o => Math.max(-11, Math.min(0, o + (dx < 0 ? -1 : 1))));
+                    // 右スワイプ=前月へ(offset-1)、左スワイプ=翌月へ(offset+1)
+                    if (Math.abs(dx) > 40) setSummaryMonthOffset(o => Math.max(-11, Math.min(0, o + (dx > 0 ? -1 : 1))));
                   }}
                 >
                   {/* 上段：月ラベル + 収支差額 */}
