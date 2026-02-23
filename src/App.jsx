@@ -243,6 +243,7 @@ export default function BudgetSimulator() {
   const [showSplitList, setShowSplitList] = useState(false);
   const [showRecurringList, setShowRecurringList] = useState(false);
   const [showCFList, setShowCFList] = useState(false);
+  const [summaryMonthOffset, setSummaryMonthOffset] = useState(0); // 0=今月, -1=先月...
 
   useEffect(() => { saveToStorage('creditCards', creditCards); }, [creditCards]);
   useEffect(() => { saveToStorage('splitPayments', splitPayments); }, [splitPayments]);
@@ -1611,16 +1612,42 @@ export default function BudgetSimulator() {
               </div>
             )}
 
-            {/* 今月サマリー */}
+            {/* 今月サマリー：スワイプで月切替 + 収支バー */}
             {(() => {
-              const bal = currentBalance.plBalance || 0;
-              const inc = currentBalance.plIncome || 0;
-              const exp = currentBalance.plExpense || 0;
-              const isPositive = bal >= 0;
+              const today = new Date();
+              const targetDate = new Date(today.getFullYear(), today.getMonth() + summaryMonthOffset, 1);
+              const targetMonth = targetDate.toISOString().slice(0, 7);
+              const currentMonth = today.toISOString().slice(0, 7);
+              const isCurrentMonth = targetMonth === currentMonth;
+
+              const bal = calculateMonthlyBalance(targetMonth);
+              const inc = bal.plIncome || 0;
+              const exp = bal.plExpense || 0;
+              const diff = inc - exp;
+              const isPositive = diff >= 0;
+              const spendRatio = inc > 0 ? Math.min(exp / inc, 1) : (exp > 0 ? 1 : 0);
+              const overRatio = inc > 0 && exp > inc ? Math.min((exp - inc) / inc, 0.5) : 0;
+
+              // スワイプ処理
+              const handleTouchStart = (e) => { e._swipeStartX = e.touches[0].clientX; };
+              const handleTouchEnd = (e) => {
+                const dx = e.changedTouches[0].clientX - (e._swipeStartX || e.changedTouches[0].clientX);
+                if (Math.abs(dx) > 40) setSummaryMonthOffset(o => Math.max(-11, Math.min(0, o + (dx < 0 ? -1 : 1))));
+              };
+
+              // 表示月ラベル
+              const monthLabel = targetDate.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
 
               return (
-                <div className={`${theme.cardGlass} rounded-2xl overflow-hidden`}>
-                  {/* 上段: 収支合計 + 締済バッジ */}
+                <div
+                  className={`${theme.cardGlass} rounded-2xl overflow-hidden select-none`}
+                  onTouchStart={e => { e.currentTarget._startX = e.touches[0].clientX; }}
+                  onTouchEnd={e => {
+                    const dx = e.changedTouches[0].clientX - (e.currentTarget._startX || 0);
+                    if (Math.abs(dx) > 40) setSummaryMonthOffset(o => Math.max(-11, Math.min(0, o + (dx < 0 ? -1 : 1))));
+                  }}
+                >
+                  {/* 上段：月ラベル + 収支差額 */}
                   <div className="px-5 pt-5 pb-4" style={{
                     background: darkMode
                       ? isPositive
@@ -1630,55 +1657,137 @@ export default function BudgetSimulator() {
                         ? 'linear-gradient(145deg, rgba(59,130,246,0.06) 0%, transparent 70%)'
                         : 'linear-gradient(145deg, rgba(239,68,68,0.06) 0%, transparent 70%)'
                   }}>
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-[10px] font-bold uppercase tracking-widest ${theme.textSecondary}`}>{currentMonth}</span>
-                        {monthlyHistory[currentMonth] && (
+                    {/* ヘッダー行 */}
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        {/* 前月へ */}
+                        <button
+                          onClick={() => setSummaryMonthOffset(o => Math.max(-11, o - 1))}
+                          className={`text-xs px-1.5 py-1 rounded-lg transition-all ${darkMode ? 'text-neutral-600 hover:text-neutral-400' : 'text-neutral-300 hover:text-neutral-500'}`}
+                        >◀</button>
+                        <span className={`text-[11px] font-bold tracking-wide ${isCurrentMonth ? theme.text : theme.textSecondary}`}>
+                          {monthLabel}
+                        </span>
+                        {monthlyHistory[targetMonth] && (
                           <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-green-500/15 text-green-500">締済</span>
+                        )}
+                        {/* 次月へ（今月より先はNG） */}
+                        <button
+                          onClick={() => setSummaryMonthOffset(o => Math.min(0, o + 1))}
+                          className={`text-xs px-1.5 py-1 rounded-lg transition-all ${summaryMonthOffset >= 0 ? 'opacity-20 pointer-events-none' : (darkMode ? 'text-neutral-600 hover:text-neutral-400' : 'text-neutral-300 hover:text-neutral-500')}`}
+                        >▶</button>
+                        {!isCurrentMonth && (
+                          <button
+                            onClick={() => setSummaryMonthOffset(0)}
+                            className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ml-1 ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}
+                          >今月</button>
                         )}
                       </div>
                       <button
                         onClick={() => { setShowTutorial(true); setTutorialPage(0); }}
                         className={`text-xs px-2 py-0.5 rounded-full transition-all ${darkMode ? 'text-neutral-700 hover:text-neutral-500' : 'text-neutral-300 hover:text-neutral-500'}`}
-                        title="使い方">❓</button>
+                      >❓</button>
                     </div>
 
-                    {/* 収支金額（大きく） */}
-                    <div className="flex items-end justify-between">
-                      <div>
-                        <p className={`text-[10px] font-medium ${theme.textSecondary} mb-1`}>今月の収支</p>
-                        <p className="text-3xl font-black tabular-nums tracking-tight" style={{
-                          color: isPositive ? theme.green : theme.red,
-                          letterSpacing: '-0.03em'
-                        }}>
-                          {isPositive ? '+' : '−'}¥{Math.abs(bal).toLocaleString()}
-                        </p>
-                      </div>
+                    {/* 収支差額（大きく） */}
+                    <div className="mb-1">
+                      <p className={`text-[10px] font-medium ${theme.textSecondary} mb-1`}>収支</p>
+                      <p className="text-3xl font-black tabular-nums" style={{
+                        color: isPositive ? theme.green : theme.red,
+                        letterSpacing: '-0.03em'
+                      }}>
+                        {isPositive ? '+' : '−'}¥{Math.abs(diff).toLocaleString()}
+                      </p>
                     </div>
                   </div>
 
-                  {/* 中段: 収入・支出 2カラム */}
-                  <div className="grid grid-cols-2" style={{
+                  {/* 収支バー */}
+                  <div className="px-5 py-4" style={{
                     borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
                   }}>
-                    {[
-                      { label: '収入', value: inc, color: theme.green, icon: '↑' },
-                      { label: '支出', value: exp, color: theme.red, icon: '↓' }
-                    ].map(({ label, value, color, icon }) => (
-                      <div key={label} className="px-4 py-3" style={{
-                        borderRight: label === '収入' ? `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` : 'none'
-                      }}>
-                        <div className="flex items-center gap-1 mb-1">
-                          <span className="text-[10px] font-black" style={{ color }}>{icon}</span>
-                          <span className={`text-[10px] font-semibold uppercase tracking-wider ${theme.textSecondary}`}>{label}</span>
-                        </div>
-                        <p className="text-base font-bold tabular-nums" style={{ color }}>
-                          ¥{value.toLocaleString()}
-                        </p>
+                    {/* 収入・支出の数字行 */}
+                    <div className="flex justify-between items-end mb-2.5">
+                      <div>
+                        <p className={`text-[9px] font-bold mb-0.5`} style={{ color: theme.green }}>↑ 収入</p>
+                        <p className="text-sm font-bold tabular-nums" style={{ color: theme.green }}>¥{inc.toLocaleString()}</p>
                       </div>
-                    ))}
-                  </div>
+                      <div className="text-right">
+                        <p className={`text-[9px] font-bold mb-0.5`} style={{ color: theme.red }}>↓ 支出</p>
+                        <p className="text-sm font-bold tabular-nums" style={{ color: theme.red }}>¥{exp.toLocaleString()}</p>
+                      </div>
+                    </div>
 
+                    {/* バー本体 */}
+                    {inc > 0 || exp > 0 ? (
+                      <div className="relative">
+                        {/* 背景トラック（収入100%） */}
+                        <div className="h-3 rounded-full overflow-visible relative" style={{
+                          backgroundColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
+                        }}>
+                          {/* 支出バー */}
+                          <div
+                            className="absolute left-0 top-0 h-full rounded-full transition-all duration-700"
+                            style={{
+                              width: inc > 0 ? `${Math.min(spendRatio * 100, 100)}%` : '100%',
+                              background: spendRatio > 0.9
+                                ? `linear-gradient(90deg, ${theme.green} 0%, ${theme.orange} 60%, ${theme.red} 100%)`
+                                : spendRatio > 0.6
+                                  ? `linear-gradient(90deg, ${theme.green} 0%, ${theme.orange} 100%)`
+                                  : theme.green,
+                              opacity: 0.85
+                            }}
+                          />
+                          {/* 赤字時：はみ出し表現 */}
+                          {!isPositive && (
+                            <div
+                              className="absolute top-[-2px] h-[calc(100%+4px)] rounded-full"
+                              style={{
+                                right: 0,
+                                width: `${Math.min(overRatio * 100 / 0.5 * 20, 28)}%`,
+                                backgroundColor: theme.red,
+                                opacity: 0.7
+                              }}
+                            />
+                          )}
+                        </div>
+                        {/* 余剰ラベル */}
+                        {isPositive && inc > 0 && (
+                          <div className="flex justify-end mt-1.5">
+                            <span className="text-[9px] font-bold tabular-nums" style={{ color: theme.green }}>
+                              余剰 {Math.round((1 - spendRatio) * 100)}%
+                            </span>
+                          </div>
+                        )}
+                        {!isPositive && (
+                          <div className="flex justify-end mt-1.5">
+                            <span className="text-[9px] font-bold tabular-nums" style={{ color: theme.red }}>
+                              赤字 ¥{Math.abs(diff).toLocaleString()}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className={`text-xs text-center py-1 ${theme.textSecondary}`}>取引なし</p>
+                    )}
+
+                    {/* ページドット */}
+                    <div className="flex justify-center gap-1 mt-3">
+                      {[-5,-4,-3,-2,-1,0].map(o => (
+                        <button
+                          key={o}
+                          onClick={() => setSummaryMonthOffset(o)}
+                          className="rounded-full transition-all duration-200"
+                          style={{
+                            width: summaryMonthOffset === o ? 16 : 5,
+                            height: 5,
+                            backgroundColor: summaryMonthOffset === o
+                              ? (isCurrentMonth ? theme.accent : theme.textSecondary)
+                              : (darkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.12)')
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               );
             })()}
