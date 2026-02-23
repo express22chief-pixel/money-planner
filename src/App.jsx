@@ -674,7 +674,28 @@ export default function BudgetSimulator() {
         return { ...prev, expenses: newExpenses };
       });
     }
+  }
+
+  const handleRenameDefaultCategory = (origName, newName, type) => {
+    if (!newName.trim() || newName === origName) return;
+    setCustomCategories(prev => ({
+      ...prev,
+      renamedDefaults: {
+        ...prev.renamedDefaults,
+        [type]: { ...(prev.renamedDefaults?.[type] || {}), [origName]: newName.trim() }
+      }
+    }));
   };
+
+  const handleDeleteDefaultCategory = (origName, type) => {
+    setCustomCategories(prev => ({
+      ...prev,
+      deletedDefaults: {
+        ...prev.deletedDefaults,
+        [type]: [...(prev.deletedDefaults?.[type] || []), origName]
+      }
+    }));
+  };;
   // カードIDから引き落とし日を計算するヘルパー
   const getSettlementDate = (txDate, cardId) => {
     const card = creditCards.find(c => c.id === cardId) || creditCards[0];
@@ -1266,7 +1287,6 @@ export default function BudgetSimulator() {
         year,
         totalValue: Math.round(totalValue)
       });
-    }
     
       allSimulations.push(simulationPath);
     }
@@ -3204,40 +3224,40 @@ export default function BudgetSimulator() {
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className={`${theme.cardGlass} rounded-3xl max-w-md w-full max-h-[85vh] flex flex-col animate-slideUp`}>
-            {/* ヘッダー */}
             <div className="flex items-center justify-between px-6 pt-5 pb-4">
               <h2 className={`text-xl font-bold ${theme.text}`}>カテゴリ管理</h2>
-              <button onClick={() => { setShowCategoryModal(false); setEditingCategoryName(null); }} className={`text-2xl ${theme.textSecondary}`}>✕</button>
+              <button
+                onClick={() => { setShowCategoryModal(false); setEditingCategoryName(null); }}
+                className={`text-2xl ${theme.textSecondary}`}
+              >✕</button>
             </div>
 
-            {/* タイプ切替 */}
             <div className="px-6 pb-3">
               <div className="flex gap-2 p-1 rounded-xl" style={{ backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5' }}>
-                {[['expense','支出',theme.red],['income','収入',theme.green]].map(([type,label,color]) => (
-                  <button key={type}
+                {(['expense', 'income']).map(type => (
+                  <button
+                    key={type}
                     onClick={() => { setNewCategoryType(type); setEditingCategoryName(null); }}
                     className="flex-1 py-2 rounded-lg font-semibold text-sm transition-all"
                     style={{
                       backgroundColor: newCategoryType === type ? (darkMode ? '#2a2a2a' : '#fff') : 'transparent',
-                      color: newCategoryType === type ? color : (darkMode ? '#737373' : '#a3a3a3'),
+                      color: newCategoryType === type ? (type === 'expense' ? theme.red : theme.green) : (darkMode ? '#737373' : '#a3a3a3'),
                       boxShadow: newCategoryType === type ? '0 1px 4px rgba(0,0,0,0.15)' : 'none'
-                    }}>
-                    {label}
+                    }}
+                  >
+                    {type === 'expense' ? '支出' : '収入'}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* カテゴリリスト */}
             <div className="flex-1 overflow-y-auto px-6 pb-3">
               <p className={`text-[10px] font-bold uppercase tracking-widest ${theme.textSecondary} mb-2`}>カテゴリ一覧</p>
               <div className="space-y-1.5">
-                {/* デフォルトカテゴリ */}
                 {(newCategoryType === 'expense' ? DEFAULT_EXPENSE_CATEGORIES : DEFAULT_INCOME_CATEGORIES)
                   .filter(c => !(newCategoryType === 'expense' ? deletedExp : deletedInc).includes(c))
                   .map(origName => {
-                    const renamed = (newCategoryType === 'expense' ? renamedExp : renamedInc)[origName];
-                    const displayName = renamed || origName;
+                    const displayName = (newCategoryType === 'expense' ? renamedExp : renamedInc)[origName] || origName;
                     const isEditing = editingCategoryName === origName + '_default';
                     return (
                       <div key={origName} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl ${darkMode ? 'bg-neutral-800/50' : 'bg-neutral-50'}`}>
@@ -3249,71 +3269,55 @@ export default function BudgetSimulator() {
                             value={editingCategoryValue}
                             onChange={e => setEditingCategoryValue(e.target.value)}
                             onBlur={() => {
-                              const trimmed = editingCategoryValue.trim();
-                              if (trimmed && trimmed !== origName) {
-                                setCustomCategories(prev => ({
-                                  ...prev,
-                                  renamedDefaults: {
-                                    ...prev.renamedDefaults,
-                                    [newCategoryType]: { ...(prev.renamedDefaults?.[newCategoryType] || {}), [origName]: trimmed }
-                                  }
-                                }));
-                              }
+                              handleRenameDefaultCategory(origName, editingCategoryValue, newCategoryType);
                               setEditingCategoryName(null);
                             }}
                             onKeyDown={e => {
                               if (e.key === 'Enter') e.target.blur();
                               if (e.key === 'Escape') setEditingCategoryName(null);
                             }}
-                            className={`flex-1 px-2.5 py-1 rounded-lg text-sm font-medium ${darkMode ? 'bg-neutral-700 text-white border border-blue-500' : 'bg-white border border-blue-400 text-neutral-900'} focus:outline-none`}
+                            className={`flex-1 px-2.5 py-1 rounded-lg text-sm font-medium border ${darkMode ? 'bg-neutral-700 text-white border-blue-500' : 'bg-white border-blue-400 text-neutral-900'} focus:outline-none`}
                           />
                         ) : (
-                          <span className={`flex-1 text-sm font-medium ${theme.text}`}>{displayName}
-                            {renamed && <span className={`ml-1.5 text-[9px] ${theme.textSecondary}`}>(元: {origName})</span>}
+                          <span className={`flex-1 text-sm font-medium ${theme.text}`}>
+                            {displayName}
+                            {(newCategoryType === 'expense' ? renamedExp : renamedInc)[origName] && (
+                              <span className={`ml-1.5 text-[9px] ${theme.textSecondary}`}>(元: {origName})</span>
+                            )}
                           </span>
                         )}
                         <button
                           onClick={() => { setEditingCategoryName(origName + '_default'); setEditingCategoryValue(displayName); }}
-                          className={`p-1.5 rounded-lg transition-all ${darkMode ? 'hover:bg-neutral-700' : 'hover:bg-neutral-200'}`}
-                          title="名前を変更">
-                          <span className="text-xs">✏️</span>
-                        </button>
+                          className={`p-1.5 rounded-lg transition-all text-xs ${darkMode ? 'hover:bg-neutral-700' : 'hover:bg-neutral-200'}`}
+                        >✏️</button>
                         {origName !== 'その他' && (
                           <button
-                            onClick={() => setCustomCategories(prev => ({
-                              ...prev,
-                              deletedDefaults: {
-                                ...prev.deletedDefaults,
-                                [newCategoryType]: [...(prev.deletedDefaults?.[newCategoryType] || []), origName]
-                              }
-                            }))}
-                            className="p-1.5 rounded-lg text-red-400 hover:text-red-500 transition-all"
-                            title="削除">
-                            <span className="text-xs">✕</span>
-                          </button>
+                            onClick={() => handleDeleteDefaultCategory(origName, newCategoryType)}
+                            className="p-1.5 rounded-lg text-xs text-red-400 hover:text-red-500 transition-all"
+                          >✕</button>
                         )}
                       </div>
                     );
                   })}
-
-                {/* カスタムカテゴリ */}
                 {(customCategories[newCategoryType] || []).length > 0 && (
                   <div className={`h-px my-2 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-200'}`} />
                 )}
                 {(customCategories[newCategoryType] || []).map(cat => (
                   <div key={cat} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl ${darkMode ? 'bg-neutral-800/50' : 'bg-neutral-50'}`}>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0" style={{ backgroundColor: theme.accent + '25', color: theme.accent }}>カスタム</span>
+                    <span
+                      className="text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0"
+                      style={{ backgroundColor: theme.accent + '25', color: theme.accent }}
+                    >カスタム</span>
                     <span className={`flex-1 text-sm font-medium ${theme.text}`}>{cat}</span>
-                    <button onClick={() => deleteCustomCategory(cat, newCategoryType)}
-                      className="p-1.5 rounded-lg text-red-400 hover:text-red-500 transition-all">
-                      <span className="text-xs">✕</span>
-                    </button>
+                    <button
+                      onClick={() => deleteCustomCategory(cat, newCategoryType)}
+                      className="p-1.5 rounded-lg text-xs text-red-400 hover:text-red-500 transition-all"
+                    >✕</button>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* 新規追加フォーム */}
             <div className={`px-6 pb-6 pt-3 border-t ${darkMode ? 'border-neutral-800' : 'border-neutral-100'}`}>
               <p className={`text-[10px] font-bold uppercase tracking-widest ${theme.textSecondary} mb-2`}>新しいカテゴリを追加</p>
               <div className="flex gap-2">
@@ -3328,16 +3332,15 @@ export default function BudgetSimulator() {
                 <button
                   onClick={addCustomCategory}
                   className="px-4 py-2.5 rounded-xl font-bold text-white text-sm hover-scale"
-                  style={{ backgroundColor: theme.accent }}>
-                  追加
-                </button>
+                  style={{ backgroundColor: theme.accent }}
+                >追加</button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {showRecurringModal && (
+            {showRecurringModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
             <div className="flex items-center justify-between mb-4">
