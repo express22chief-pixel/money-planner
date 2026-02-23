@@ -1280,14 +1280,14 @@ export default function BudgetSimulator() {
             }
           });
         }
+        
+        const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
+        simulationPath.push({
+          year,
+          totalValue: Math.round(totalValue)
+        });
       }
       
-      const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
-      simulationPath.push({
-        year,
-        totalValue: Math.round(totalValue)
-      });
-    
       allSimulations.push(simulationPath);
     }
     
@@ -1616,9 +1616,7 @@ export default function BudgetSimulator() {
               const bal = currentBalance.plBalance || 0;
               const inc = currentBalance.plIncome || 0;
               const exp = currentBalance.plExpense || 0;
-              const savingRate = inc > 0 ? Math.round((bal / inc) * 100) : 0;
               const isPositive = bal >= 0;
-              const spendRatio = inc > 0 ? Math.min(exp / inc, 1) : 0;
 
               return (
                 <div className={`${theme.cardGlass} rounded-2xl overflow-hidden`}>
@@ -1656,14 +1654,6 @@ export default function BudgetSimulator() {
                           {isPositive ? '+' : '−'}¥{Math.abs(bal).toLocaleString()}
                         </p>
                       </div>
-                      {inc > 0 && (
-                        <div className="text-right pb-0.5">
-                          <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>貯蓄率</p>
-                          <p className="text-xl font-black tabular-nums" style={{
-                            color: savingRate >= 20 ? theme.green : savingRate >= 10 ? theme.orange : theme.red
-                          }}>{savingRate}<span className="text-sm font-bold">%</span></p>
-                        </div>
-                      )}
                     </div>
                   </div>
 
@@ -1689,31 +1679,6 @@ export default function BudgetSimulator() {
                     ))}
                   </div>
 
-                  {/* 下段: 支出率バー */}
-                  {inc > 0 && (
-                    <div className="px-5 pb-4 pt-2.5" style={{
-                      borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
-                    }}>
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className={`text-[9px] font-bold uppercase tracking-wider ${theme.textSecondary}`}>支出率</span>
-                        <span className="text-[9px] font-bold tabular-nums" style={{
-                          color: spendRatio > 0.9 ? theme.red : spendRatio > 0.7 ? theme.orange : theme.green
-                        }}>{Math.round(spendRatio * 100)}%</span>
-                      </div>
-                      <div className="h-1 rounded-full overflow-hidden" style={{
-                        backgroundColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
-                      }}>
-                        <div className="h-full rounded-full transition-all duration-700" style={{
-                          width: `${spendRatio * 100}%`,
-                          background: spendRatio > 0.9
-                            ? `linear-gradient(90deg, ${theme.orange}, ${theme.red})`
-                            : spendRatio > 0.7
-                              ? `linear-gradient(90deg, ${theme.green}, ${theme.orange})`
-                              : theme.green
-                        }}/>
-                      </div>
-                    </div>
-                  )}
                 </div>
               );
             })()}
@@ -1956,23 +1921,50 @@ export default function BudgetSimulator() {
 
             {/* 定期支払い */}
             <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
-              {/* ヘッダー（常時表示） */}
-              <div className="flex items-center justify-between px-4 py-3">
-                <button
-                  onClick={() => setShowRecurringList(!showRecurringList)}
-                  className="flex items-center gap-2 flex-1 text-left"
-                >
-                  <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</span>
-                  {recurringTransactions.length > 0 && (
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-600'}`}>
-                      {recurringTransactions.length}件
-                    </span>
-                  )}
-                  <span className={`text-xs ${theme.textSecondary} ml-auto mr-2`} style={{ display:'inline-block', transform: showRecurringList ? 'rotate(180deg)' : 'rotate(0deg)', transition:'transform 0.2s' }}>▼</span>
-                </button>
-                <button onClick={() => { setEditingRecurring(null); setShowRecurringModal(true); }}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold text-white hover-scale shrink-0"
-                  style={{ backgroundColor: theme.accent }}>+ 追加</button>
+              {/* ヘッダー（常時表示）+ 折りたたみ時の合計表示 */}
+              <div className="px-4 pt-3 pb-2">
+                <div className="flex items-center justify-between mb-1.5">
+                  <button
+                    onClick={() => setShowRecurringList(!showRecurringList)}
+                    className="flex items-center gap-2 flex-1 text-left"
+                  >
+                    <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>定期支払い</span>
+                    {recurringTransactions.length > 0 && (
+                      <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>
+                        {recurringTransactions.length}件
+                      </span>
+                    )}
+                    <span className={`text-xs ${theme.textSecondary} ml-auto mr-2`} style={{ display:'inline-block', transform: showRecurringList ? 'rotate(180deg)' : 'rotate(0deg)', transition:'transform 0.2s' }}>▼</span>
+                  </button>
+                  <button onClick={() => { setEditingRecurring(null); setShowRecurringModal(true); }}
+                    className="px-3 py-1 rounded-lg text-xs font-semibold text-white hover-scale shrink-0"
+                    style={{ backgroundColor: theme.accent }}>+ 追加</button>
+                </div>
+                {recurringTransactions.length > 0 && (() => {
+                  const fixedTotal = recurringTransactions
+                    .filter(r => r.type === 'expense')
+                    .reduce((s, r) => s + Number(r.amount || 0), 0);
+                  const investTotal = recurringTransactions
+                    .filter(r => r.type === 'investment' || r.type === 'fund' || r.type === 'insurance')
+                    .reduce((s, r) => s + Number(r.amount || 0), 0);
+                  return (
+                    <div className="flex items-center gap-3 pb-1">
+                      {fixedTotal > 0 && (
+                        <span className="text-xs tabular-nums" style={{ color: theme.red }}>
+                          固定費 <span className="font-bold">¥{fixedTotal.toLocaleString()}</span>
+                        </span>
+                      )}
+                      {investTotal > 0 && (
+                        <span className="text-xs tabular-nums" style={{ color: theme.green }}>
+                          積立 <span className="font-bold">¥{investTotal.toLocaleString()}</span>
+                        </span>
+                      )}
+                      <span className={`text-xs tabular-nums ml-auto font-black ${theme.text}`}>
+                        月計 ¥{(fixedTotal + investTotal).toLocaleString()}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* 展開コンテンツ */}
@@ -2019,6 +2011,95 @@ export default function BudgetSimulator() {
               )}
             </div>
 
+
+            {/* 予定CF：今月の引き落とし・支払い予定 */}
+            {(() => {
+              const today = new Date();
+              const thisYearMonth = today.toISOString().slice(0, 7);
+              const todayDay = today.getDate();
+
+              // ① クレカ引き落とし予定（今月が引き落とし月のもの）
+              const creditItems = [];
+              creditCards.forEach(card => {
+                const amount = transactions
+                  .filter(t => {
+                    if (t.amount >= 0 || t.settled || t.paymentMethod !== 'credit') return false;
+                    if (t.cardId && t.cardId !== card.id) return false;
+                    if (!t.cardId && card.id !== creditCards[0]?.id) return false;
+                    const sd = calculateSettlementDate(t.date, card.id);
+                    return sd && sd.toISOString().slice(0, 7) === thisYearMonth;
+                  })
+                  .reduce((s, t) => s + Math.abs(t.amount), 0);
+                if (amount > 0) {
+                  const isPast = (card.paymentDay || 10) <= todayDay;
+                  creditItems.push({ kind: 'credit', name: card.name, amount, day: card.paymentDay || 10, isPast });
+                }
+              });
+
+              // ② 定期固定費（今月の引き落とし予定）
+              const fixedItems = recurringTransactions
+                .filter(r => r.type === 'expense')
+                .map(r => {
+                  const day = (!r.recurrenceType || r.recurrenceType === 'monthly-date') ? (r.day || 1) : null;
+                  return { kind: 'fixed', name: r.name, amount: Number(r.amount || 0), day, category: r.category, isPast: day !== null && day <= todayDay };
+                });
+
+              const allItems = [...creditItems, ...fixedItems]
+                .filter(i => i.amount > 0)
+                .sort((a, b) => (a.day ?? 99) - (b.day ?? 99));
+
+              if (allItems.length === 0) return null;
+
+              const remainingTotal = allItems.filter(i => !i.isPast).reduce((s, i) => s + i.amount, 0);
+
+              return (
+                <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
+                  <div className="flex items-center justify-between px-4 py-3" style={{
+                    borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+                  }}>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>予定CF</span>
+                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>{allItems.length}件</span>
+                    </div>
+                    {remainingTotal > 0 && (
+                      <div className="flex items-center gap-1">
+                        <span className={`text-[9px] ${theme.textSecondary}`}>今後</span>
+                        <span className="text-sm font-black tabular-nums" style={{ color: theme.red }}>¥{remainingTotal.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="divide-y" style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
+                    {allItems.map((item, idx) => (
+                      <div key={idx} className="flex items-center px-4 py-2.5" style={{ opacity: item.isPast ? 0.4 : 1 }}>
+                        <div className="w-9 shrink-0 text-center">
+                          {item.day !== null ? (
+                            <>
+                              <p className={`text-sm font-black tabular-nums leading-tight ${item.isPast ? theme.textSecondary : theme.text}`}>{item.day}</p>
+                              <p className={`text-[8px] ${theme.textSecondary} leading-none`}>日</p>
+                            </>
+                          ) : (
+                            <span className={`text-xs ${theme.textSecondary}`}>—</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 mx-2">
+                          <span className="text-sm">{item.kind === 'credit' ? '💳' : '🔄'}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium truncate ${theme.text}`}>{item.name}</p>
+                          {item.category && <p className={`text-[10px] ${theme.textSecondary}`}>{item.category}</p>}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-bold tabular-nums" style={{ color: item.isPast ? (darkMode ? '#555' : '#bbb') : theme.red }}>
+                            ¥{item.amount.toLocaleString()}
+                          </p>
+                          {item.isPast && <p className="text-[9px] text-green-500 font-bold">完了</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             {/* 立替待ち */}
             {splitPayments.filter(s => !s.settled).length > 0 && (
               <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
