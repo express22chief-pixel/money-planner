@@ -141,6 +141,8 @@ export default function BudgetSimulator() {
   const [showOnboarding, setShowOnboarding] = useState(!loadFromStorage('userInfo', null));
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialPage, setTutorialPage] = useState(0);
+  const [editingCategoryName, setEditingCategoryName] = useState(null);
+  const [editingCategoryValue, setEditingCategoryValue] = useState('');
   const [showBenchmark, setShowBenchmark] = useState(false);
   const [showBudgetModal, setShowBudgetModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -205,10 +207,16 @@ export default function BudgetSimulator() {
     loadFromStorage('recurringTransactions', [])
   );
 
+  const DEFAULT_EXPENSE_CATEGORIES = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他'];
+  const DEFAULT_INCOME_CATEGORIES = ['給料', 'ボーナス', '副業', '投資収益', '年金', 'その他'];
+
   const [customCategories, setCustomCategories] = useState(() =>
     loadFromStorage('customCategories', {
       expense: [],
-      income: []
+      income: [],
+      // デフォルトカテゴリの削除・名前変更を管理
+      deletedDefaults: { expense: [], income: [] },
+      renamedDefaults: { expense: {}, income: {} }
     })
   );
 
@@ -380,8 +388,23 @@ export default function BudgetSimulator() {
       showOnboarding, showCloseMonthModal, editingTransaction, showInvestModal]);
 
 
-  const expenseCategories = ['食費', '住居費', '光熱費', '通信費', '交通費', '娯楽費', '医療費', '教育費', '被服費', 'その他', ...customCategories.expense];
-  const incomeCategories = ['給料', 'ボーナス', '副業', '投資収益', '年金', 'その他', ...customCategories.income];
+  // デフォルトカテゴリに削除・名前変更を適用してから結合
+  const deletedExp = customCategories.deletedDefaults?.expense || [];
+  const deletedInc = customCategories.deletedDefaults?.income || [];
+  const renamedExp = customCategories.renamedDefaults?.expense || {};
+  const renamedInc = customCategories.renamedDefaults?.income || {};
+  const expenseCategories = [
+    ...DEFAULT_EXPENSE_CATEGORIES
+      .filter(c => !deletedExp.includes(c))
+      .map(c => renamedExp[c] || c),
+    ...customCategories.expense
+  ];
+  const incomeCategories = [
+    ...DEFAULT_INCOME_CATEGORIES
+      .filter(c => !deletedInc.includes(c))
+      .map(c => renamedInc[c] || c),
+    ...customCategories.income
+  ];
 
   // 金融広報中央委員会「家計の金融行動に関する世論調査」2023年データ（単身世帯）
   const benchmarkData = {
@@ -1236,14 +1259,15 @@ export default function BudgetSimulator() {
             }
           });
         }
-        
-        const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
-        simulationPath.push({
-          year,
-          totalValue: Math.round(totalValue)
-        });
       }
       
+      const totalValue = savings + regularInvestment + nisaInvestment + dryPowder;
+      simulationPath.push({
+        year,
+        totalValue: Math.round(totalValue)
+      });
+    }
+    
       allSimulations.push(simulationPath);
     }
     
@@ -1279,6 +1303,7 @@ export default function BudgetSimulator() {
     let nisaInvestment = assetData.nisa || 0;
     let savings = assetData.savings;
     let dryPowder = assetData.dryPowder || 0;
+    let cumulativeTaxSaved = 0;
     
     const NISA_TSUMITATE_LIMIT = 3600000;
     const NISA_GROWTH_LIMIT = 2400000;
@@ -1335,7 +1360,9 @@ export default function BudgetSimulator() {
         regularInvestment += (regularMonthlyProfit - regularTax);
   
         yearlyProfit += nisaMonthlyProfit + regularMonthlyProfit;
-        yearlyTaxSaved += regularTax;
+        // NISA節税効果 = NISA運用益に対してかかるはずだった税金（非課税のため節約できた額）
+        yearlyTaxSaved += nisaMonthlyProfit * TAX_RATE;
+        cumulativeTaxSaved += nisaMonthlyProfit * TAX_RATE;
   
         // 4. ライフイベントの控除（日付一致判定）
         const currentDate = new Date();
@@ -1391,7 +1418,7 @@ export default function BudgetSimulator() {
         outperformRate: outperformRate.toFixed(1),
         percentile: percentile.toFixed(1),
         nisaUsed: Math.round(nisaTotalUsed),
-        taxSaved: Math.round(yearlyTaxSaved),
+        taxSaved: Math.round(cumulativeTaxSaved),  // 累積節税効果
         yearlyProfit: Math.round(yearlyProfit)
       });
     }
@@ -1565,43 +1592,111 @@ export default function BudgetSimulator() {
             )}
 
             {/* 今月サマリー */}
-            <div className={`${theme.cardGlass} rounded-xl px-4 py-3`}>
-              <div className="flex items-center justify-between mb-2">
-                <p className={`text-xs font-semibold ${theme.textSecondary} uppercase tracking-widest`}>{currentMonth}</p>
-                <div className="flex items-center gap-2">
-                  {monthlyHistory[currentMonth] && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-green-500/15 text-green-500">締済</span>
+            {(() => {
+              const bal = currentBalance.plBalance || 0;
+              const inc = currentBalance.plIncome || 0;
+              const exp = currentBalance.plExpense || 0;
+              const savingRate = inc > 0 ? Math.round((bal / inc) * 100) : 0;
+              const isPositive = bal >= 0;
+              const spendRatio = inc > 0 ? Math.min(exp / inc, 1) : 0;
+
+              return (
+                <div className={`${theme.cardGlass} rounded-2xl overflow-hidden`}>
+                  {/* 上段: 収支合計 + 締済バッジ */}
+                  <div className="px-5 pt-5 pb-4" style={{
+                    background: darkMode
+                      ? isPositive
+                        ? 'linear-gradient(145deg, rgba(10,132,255,0.10) 0%, transparent 70%)'
+                        : 'linear-gradient(145deg, rgba(255,69,58,0.10) 0%, transparent 70%)'
+                      : isPositive
+                        ? 'linear-gradient(145deg, rgba(59,130,246,0.06) 0%, transparent 70%)'
+                        : 'linear-gradient(145deg, rgba(239,68,68,0.06) 0%, transparent 70%)'
+                  }}>
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`text-[10px] font-bold uppercase tracking-widest ${theme.textSecondary}`}>{currentMonth}</span>
+                        {monthlyHistory[currentMonth] && (
+                          <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-green-500/15 text-green-500">締済</span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => { setShowTutorial(true); setTutorialPage(0); }}
+                        className={`text-xs px-2 py-0.5 rounded-full transition-all ${darkMode ? 'text-neutral-700 hover:text-neutral-500' : 'text-neutral-300 hover:text-neutral-500'}`}
+                        title="使い方">❓</button>
+                    </div>
+
+                    {/* 収支金額（大きく） */}
+                    <div className="flex items-end justify-between">
+                      <div>
+                        <p className={`text-[10px] font-medium ${theme.textSecondary} mb-1`}>今月の収支</p>
+                        <p className="text-3xl font-black tabular-nums tracking-tight" style={{
+                          color: isPositive ? theme.green : theme.red,
+                          letterSpacing: '-0.03em'
+                        }}>
+                          {isPositive ? '+' : '−'}¥{Math.abs(bal).toLocaleString()}
+                        </p>
+                      </div>
+                      {inc > 0 && (
+                        <div className="text-right pb-0.5">
+                          <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>貯蓄率</p>
+                          <p className="text-xl font-black tabular-nums" style={{
+                            color: savingRate >= 20 ? theme.green : savingRate >= 10 ? theme.orange : theme.red
+                          }}>{savingRate}<span className="text-sm font-bold">%</span></p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 中段: 収入・支出 2カラム */}
+                  <div className="grid grid-cols-2" style={{
+                    borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+                  }}>
+                    {[
+                      { label: '収入', value: inc, color: theme.green, icon: '↑' },
+                      { label: '支出', value: exp, color: theme.red, icon: '↓' }
+                    ].map(({ label, value, color, icon }) => (
+                      <div key={label} className="px-4 py-3" style={{
+                        borderRight: label === '収入' ? `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}` : 'none'
+                      }}>
+                        <div className="flex items-center gap-1 mb-1">
+                          <span className="text-[10px] font-black" style={{ color }}>{icon}</span>
+                          <span className={`text-[10px] font-semibold uppercase tracking-wider ${theme.textSecondary}`}>{label}</span>
+                        </div>
+                        <p className="text-base font-bold tabular-nums" style={{ color }}>
+                          ¥{value.toLocaleString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 下段: 支出率バー */}
+                  {inc > 0 && (
+                    <div className="px-5 pb-4 pt-2.5" style={{
+                      borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+                    }}>
+                      <div className="flex justify-between items-center mb-1.5">
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${theme.textSecondary}`}>支出率</span>
+                        <span className="text-[9px] font-bold tabular-nums" style={{
+                          color: spendRatio > 0.9 ? theme.red : spendRatio > 0.7 ? theme.orange : theme.green
+                        }}>{Math.round(spendRatio * 100)}%</span>
+                      </div>
+                      <div className="h-1 rounded-full overflow-hidden" style={{
+                        backgroundColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
+                      }}>
+                        <div className="h-full rounded-full transition-all duration-700" style={{
+                          width: `${spendRatio * 100}%`,
+                          background: spendRatio > 0.9
+                            ? `linear-gradient(90deg, ${theme.orange}, ${theme.red})`
+                            : spendRatio > 0.7
+                              ? `linear-gradient(90deg, ${theme.green}, ${theme.orange})`
+                              : theme.green
+                        }}/>
+                      </div>
+                    </div>
                   )}
-                  <button
-                    onClick={() => { setShowTutorial(true); setTutorialPage(0); }}
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium transition-all ${darkMode ? 'text-neutral-500 hover:text-neutral-300' : 'text-neutral-400 hover:text-neutral-600'}`}
-                    title="使い方を見る"
-                  >
-                    ❓使い方
-                  </button>
                 </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>収入</p>
-                  <p className="text-base font-bold tabular-nums" style={{ color: theme.green }}>
-                    ¥{(currentBalance.plIncome||0).toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>支出</p>
-                  <p className="text-base font-bold tabular-nums" style={{ color: theme.red }}>
-                    ¥{(currentBalance.plExpense||0).toLocaleString()}
-                  </p>
-                </div>
-                <div>
-                  <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>収支</p>
-                  <p className="text-base font-bold tabular-nums" style={{ color: (currentBalance.plBalance||0) >= 0 ? theme.green : theme.red }}>
-                    {(currentBalance.plBalance||0) >= 0 ? '+' : ''}¥{(currentBalance.plBalance||0).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* 取引入力 */}
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
@@ -3108,79 +3203,135 @@ export default function BudgetSimulator() {
 
       {showCategoryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
-          <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full animate-slideUp`}>
-            <div className="flex items-center justify-between mb-4">
+          <div className={`${theme.cardGlass} rounded-3xl max-w-md w-full max-h-[85vh] flex flex-col animate-slideUp`}>
+            {/* ヘッダー */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-4">
               <h2 className={`text-xl font-bold ${theme.text}`}>カテゴリ管理</h2>
-              <button onClick={() => setShowCategoryModal(false)} className={`text-2xl ${theme.textSecondary}`}>✕</button>
+              <button onClick={() => { setShowCategoryModal(false); setEditingCategoryName(null); }} className={`text-2xl ${theme.textSecondary}`}>✕</button>
             </div>
 
-            <div className="space-y-4">
-              <div className="flex gap-2 mb-4">
-                <button
-                  onClick={() => setNewCategoryType('expense')}
-                  className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
-                    newCategoryType === 'expense' ? 'scale-105 shadow-md' : 'hover-scale'
-                  }`}
-                  style={{
-                    backgroundColor: newCategoryType === 'expense' ? theme.red : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                    color: newCategoryType === 'expense' ? '#fff' : theme.textSecondary
-                  }}
-                >
-                  支出
-                </button>
-                <button
-                  onClick={() => setNewCategoryType('income')}
-                  className={`flex-1 py-2 rounded-lg font-semibold text-sm transition-all duration-200 ${
-                    newCategoryType === 'income' ? 'scale-105 shadow-md' : 'hover-scale'
-                  }`}
-                  style={{
-                    backgroundColor: newCategoryType === 'income' ? theme.green : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                    color: newCategoryType === 'income' ? '#fff' : theme.textSecondary
-                  }}
-                >
-                  収入
-                </button>
+            {/* タイプ切替 */}
+            <div className="px-6 pb-3">
+              <div className="flex gap-2 p-1 rounded-xl" style={{ backgroundColor: darkMode ? '#1a1a1a' : '#f5f5f5' }}>
+                {[['expense','支出',theme.red],['income','収入',theme.green]].map(([type,label,color]) => (
+                  <button key={type}
+                    onClick={() => { setNewCategoryType(type); setEditingCategoryName(null); }}
+                    className="flex-1 py-2 rounded-lg font-semibold text-sm transition-all"
+                    style={{
+                      backgroundColor: newCategoryType === type ? (darkMode ? '#2a2a2a' : '#fff') : 'transparent',
+                      color: newCategoryType === type ? color : (darkMode ? '#737373' : '#a3a3a3'),
+                      boxShadow: newCategoryType === type ? '0 1px 4px rgba(0,0,0,0.15)' : 'none'
+                    }}>
+                    {label}
+                  </button>
+                ))}
               </div>
+            </div>
 
-              <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>新しいカテゴリ名</label>
+            {/* カテゴリリスト */}
+            <div className="flex-1 overflow-y-auto px-6 pb-3">
+              <p className={`text-[10px] font-bold uppercase tracking-widest ${theme.textSecondary} mb-2`}>カテゴリ一覧</p>
+              <div className="space-y-1.5">
+                {/* デフォルトカテゴリ */}
+                {(newCategoryType === 'expense' ? DEFAULT_EXPENSE_CATEGORIES : DEFAULT_INCOME_CATEGORIES)
+                  .filter(c => !(newCategoryType === 'expense' ? deletedExp : deletedInc).includes(c))
+                  .map(origName => {
+                    const renamed = (newCategoryType === 'expense' ? renamedExp : renamedInc)[origName];
+                    const displayName = renamed || origName;
+                    const isEditing = editingCategoryName === origName + '_default';
+                    return (
+                      <div key={origName} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl ${darkMode ? 'bg-neutral-800/50' : 'bg-neutral-50'}`}>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0 ${darkMode ? 'bg-neutral-700 text-neutral-500' : 'bg-neutral-200 text-neutral-400'}`}>標準</span>
+                        {isEditing ? (
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editingCategoryValue}
+                            onChange={e => setEditingCategoryValue(e.target.value)}
+                            onBlur={() => {
+                              const trimmed = editingCategoryValue.trim();
+                              if (trimmed && trimmed !== origName) {
+                                setCustomCategories(prev => ({
+                                  ...prev,
+                                  renamedDefaults: {
+                                    ...prev.renamedDefaults,
+                                    [newCategoryType]: { ...(prev.renamedDefaults?.[newCategoryType] || {}), [origName]: trimmed }
+                                  }
+                                }));
+                              }
+                              setEditingCategoryName(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') e.target.blur();
+                              if (e.key === 'Escape') setEditingCategoryName(null);
+                            }}
+                            className={`flex-1 px-2.5 py-1 rounded-lg text-sm font-medium ${darkMode ? 'bg-neutral-700 text-white border border-blue-500' : 'bg-white border border-blue-400 text-neutral-900'} focus:outline-none`}
+                          />
+                        ) : (
+                          <span className={`flex-1 text-sm font-medium ${theme.text}`}>{displayName}
+                            {renamed && <span className={`ml-1.5 text-[9px] ${theme.textSecondary}`}>(元: {origName})</span>}
+                          </span>
+                        )}
+                        <button
+                          onClick={() => { setEditingCategoryName(origName + '_default'); setEditingCategoryValue(displayName); }}
+                          className={`p-1.5 rounded-lg transition-all ${darkMode ? 'hover:bg-neutral-700' : 'hover:bg-neutral-200'}`}
+                          title="名前を変更">
+                          <span className="text-xs">✏️</span>
+                        </button>
+                        {origName !== 'その他' && (
+                          <button
+                            onClick={() => setCustomCategories(prev => ({
+                              ...prev,
+                              deletedDefaults: {
+                                ...prev.deletedDefaults,
+                                [newCategoryType]: [...(prev.deletedDefaults?.[newCategoryType] || []), origName]
+                              }
+                            }))}
+                            className="p-1.5 rounded-lg text-red-400 hover:text-red-500 transition-all"
+                            title="削除">
+                            <span className="text-xs">✕</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                {/* カスタムカテゴリ */}
+                {(customCategories[newCategoryType] || []).length > 0 && (
+                  <div className={`h-px my-2 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-200'}`} />
+                )}
+                {(customCategories[newCategoryType] || []).map(cat => (
+                  <div key={cat} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl ${darkMode ? 'bg-neutral-800/50' : 'bg-neutral-50'}`}>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-md font-bold shrink-0" style={{ backgroundColor: theme.accent + '25', color: theme.accent }}>カスタム</span>
+                    <span className={`flex-1 text-sm font-medium ${theme.text}`}>{cat}</span>
+                    <button onClick={() => deleteCustomCategory(cat, newCategoryType)}
+                      className="p-1.5 rounded-lg text-red-400 hover:text-red-500 transition-all">
+                      <span className="text-xs">✕</span>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* 新規追加フォーム */}
+            <div className={`px-6 pb-6 pt-3 border-t ${darkMode ? 'border-neutral-800' : 'border-neutral-100'}`}>
+              <p className={`text-[10px] font-bold uppercase tracking-widest ${theme.textSecondary} mb-2`}>新しいカテゴリを追加</p>
+              <div className="flex gap-2">
                 <input
                   type="text"
                   placeholder="例：サブスク"
                   value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  className={`w-full px-4 py-3 rounded-xl transition-all duration-200 ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
-                  } focus:outline-none focus:border-blue-500`}
+                  onChange={e => setNewCategoryName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && addCustomCategory()}
+                  className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-neutral-50 border border-neutral-200 text-neutral-900'} focus:outline-none focus:border-blue-500`}
                 />
+                <button
+                  onClick={addCustomCategory}
+                  className="px-4 py-2.5 rounded-xl font-bold text-white text-sm hover-scale"
+                  style={{ backgroundColor: theme.accent }}>
+                  追加
+                </button>
               </div>
-
-              <button
-                onClick={addCustomCategory}
-                className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
-                style={{ backgroundColor: theme.accent }}
-              >
-                追加
-              </button>
-
-              {customCategories[newCategoryType].length > 0 && (
-                <div className="border-t pt-4" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
-                  <h3 className={`text-sm font-semibold ${theme.text} mb-2`}>カスタムカテゴリ</h3>
-                  <div className="space-y-2">
-                    {customCategories[newCategoryType].map(cat => (
-                      <div key={cat} className={`flex items-center justify-between p-2 rounded-lg ${darkMode ? 'bg-neutral-800' : 'bg-neutral-100'}`}>
-                        <span className={`text-sm ${theme.text}`}>{cat}</span>
-                        <button
-                          onClick={() => deleteCustomCategory(cat, newCategoryType)}
-                          className="text-red-500 hover:scale-110 transition-transform"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
