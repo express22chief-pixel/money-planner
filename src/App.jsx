@@ -1,4 +1,3 @@
-import './index.css'
 import React, { useState, useEffect, useCallback } from 'react';
 import { PlusCircle, TrendingUp, Calendar, DollarSign, Sun, Moon, Zap, Droplets, Target, Settings, Edit2, RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, BarChart, Bar } from 'recharts';
@@ -695,7 +694,7 @@ export default function BudgetSimulator() {
         [type]: [...(prev.deletedDefaults?.[type] || []), origName]
       }
     }));
-  };;
+  };
   // カードIDから引き落とし日を計算するヘルパー
   const getSettlementDate = (txDate, cardId) => {
     const card = creditCards.find(c => c.id === cardId) || creditCards[0];
@@ -2026,7 +2025,7 @@ export default function BudgetSimulator() {
                     if (t.amount >= 0 || t.settled || t.paymentMethod !== 'credit') return false;
                     if (t.cardId && t.cardId !== card.id) return false;
                     if (!t.cardId && card.id !== creditCards[0]?.id) return false;
-                    const sd = calculateSettlementDate(t.date, card.id);
+                    const sd = getSettlementDate(t.date, card.id);
                     return sd && sd.toISOString().slice(0, 7) === thisYearMonth;
                   })
                   .reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -3421,7 +3420,7 @@ export default function BudgetSimulator() {
         </div>
       )}
 
-            {showRecurringModal && (
+      {showRecurringModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
           <div className={`${theme.cardGlass} rounded-3xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
             <div className="flex items-center justify-between mb-4">
