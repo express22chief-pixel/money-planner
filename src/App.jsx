@@ -242,6 +242,7 @@ export default function BudgetSimulator() {
   const [splitPayments, setSplitPayments] = useState(() => loadFromStorage('splitPayments', []));
   const [showSplitList, setShowSplitList] = useState(false);
   const [showRecurringList, setShowRecurringList] = useState(false);
+  const [showCFList, setShowCFList] = useState(false);
 
   useEffect(() => { saveToStorage('creditCards', creditCards); }, [creditCards]);
   useEffect(() => { saveToStorage('splitPayments', splitPayments); }, [splitPayments]);
@@ -2017,7 +2018,6 @@ export default function BudgetSimulator() {
               const thisYearMonth = today.toISOString().slice(0, 7);
               const todayDay = today.getDate();
 
-              // ① クレカ引き落とし予定（今月が引き落とし月のもの）
               const creditItems = [];
               creditCards.forEach(card => {
                 const amount = transactions
@@ -2035,7 +2035,6 @@ export default function BudgetSimulator() {
                 }
               });
 
-              // ② 定期固定費（今月の引き落とし予定）
               const fixedItems = recurringTransactions
                 .filter(r => r.type === 'expense')
                 .map(r => {
@@ -2050,52 +2049,68 @@ export default function BudgetSimulator() {
               if (allItems.length === 0) return null;
 
               const remainingTotal = allItems.filter(i => !i.isPast).reduce((s, i) => s + i.amount, 0);
+              const totalAll = allItems.reduce((s, i) => s + i.amount, 0);
 
               return (
                 <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
-                  <div className="flex items-center justify-between px-4 py-3" style={{
-                    borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
-                  }}>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>予定CF</span>
-                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>{allItems.length}件</span>
+                  {/* ヘッダー（常時表示） */}
+                  <div className="px-4 pt-3 pb-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <button
+                        onClick={() => setShowCFList(!showCFList)}
+                        className="flex items-center gap-2 flex-1 text-left"
+                      >
+                        <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>予定CF</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>{allItems.length}件</span>
+                        <span className={`text-xs ${theme.textSecondary} ml-auto mr-2`} style={{ display: 'inline-block', transform: showCFList ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
+                      </button>
                     </div>
-                    {remainingTotal > 0 && (
-                      <div className="flex items-center gap-1">
-                        <span className={`text-[9px] ${theme.textSecondary}`}>今後</span>
-                        <span className="text-sm font-black tabular-nums" style={{ color: theme.red }}>¥{remainingTotal.toLocaleString()}</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {remainingTotal > 0 && (
+                        <span className="text-xs tabular-nums" style={{ color: theme.red }}>
+                          残 <span className="font-bold">¥{remainingTotal.toLocaleString()}</span>
+                        </span>
+                      )}
+                      <span className={`text-xs tabular-nums ml-auto font-black ${theme.text}`}>
+                        月計 ¥{totalAll.toLocaleString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="divide-y" style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
-                    {allItems.map((item, idx) => (
-                      <div key={idx} className="flex items-center px-4 py-2.5" style={{ opacity: item.isPast ? 0.4 : 1 }}>
-                        <div className="w-9 shrink-0 text-center">
-                          {item.day !== null ? (
-                            <>
-                              <p className={`text-sm font-black tabular-nums leading-tight ${item.isPast ? theme.textSecondary : theme.text}`}>{item.day}</p>
-                              <p className={`text-[8px] ${theme.textSecondary} leading-none`}>日</p>
-                            </>
-                          ) : (
-                            <span className={`text-xs ${theme.textSecondary}`}>—</span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 mx-2">
-                          <span className="text-sm">{item.kind === 'credit' ? '💳' : '🔄'}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className={`text-sm font-medium truncate ${theme.text}`}>{item.name}</p>
-                          {item.category && <p className={`text-[10px] ${theme.textSecondary}`}>{item.category}</p>}
-                        </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-sm font-bold tabular-nums" style={{ color: item.isPast ? (darkMode ? '#555' : '#bbb') : theme.red }}>
-                            ¥{item.amount.toLocaleString()}
-                          </p>
-                          {item.isPast && <p className="text-[9px] text-green-500 font-bold">完了</p>}
-                        </div>
+
+                  {/* 展開コンテンツ */}
+                  {showCFList && (
+                    <div className={`border-t animate-fadeIn`} style={{ borderColor: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+                      <div className="divide-y" style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
+                        {allItems.map((item, idx) => (
+                          <div key={idx} className="flex items-center px-4 py-2.5" style={{ opacity: item.isPast ? 0.4 : 1 }}>
+                            <div className="w-9 shrink-0 text-center">
+                              {item.day !== null ? (
+                                <>
+                                  <p className={`text-sm font-black tabular-nums leading-tight ${item.isPast ? theme.textSecondary : theme.text}`}>{item.day}</p>
+                                  <p className={`text-[8px] ${theme.textSecondary} leading-none`}>日</p>
+                                </>
+                              ) : (
+                                <span className={`text-xs ${theme.textSecondary}`}>—</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1.5 mx-2">
+                              <span className="text-sm">{item.kind === 'credit' ? '💳' : '🔄'}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-sm font-medium truncate ${theme.text}`}>{item.name}</p>
+                              {item.category && <p className={`text-[10px] ${theme.textSecondary}`}>{item.category}</p>}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-bold tabular-nums" style={{ color: item.isPast ? (darkMode ? '#555' : '#bbb') : theme.red }}>
+                                ¥{item.amount.toLocaleString()}
+                              </p>
+                              {item.isPast && <p className="text-[9px] text-green-500 font-bold">完了</p>}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    </div>
+                  )}
                 </div>
               );
             })()}
