@@ -243,6 +243,7 @@ export default function BudgetSimulator() {
   const [showSplitList, setShowSplitList] = useState(false);
   const [showRecurringList, setShowRecurringList] = useState(false);
   const [showCFList, setShowCFList] = useState(false);
+  const [showAddTransaction, setShowAddTransaction] = useState(false); // FABからの取引入力モーダル
   const [expandedCreditGroups, setExpandedCreditGroups] = useState({});
   const [summaryMonthOffset, setSummaryMonthOffset] = useState(0); // 0=今月, -1=先月...
 
@@ -1607,12 +1608,6 @@ export default function BudgetSimulator() {
               >
                 {darkMode ? <Sun size={18} className="text-yellow-400" /> : <Moon size={18} className="text-neutral-600" />}
               </button>
-              <button
-                onClick={() => setShowSettings(true)}
-                className={`p-2 rounded-lg transition-all duration-200 hover-scale ${darkMode ? 'bg-neutral-800' : 'bg-neutral-100'}`}
-              >
-                <Settings size={18} className={theme.text} />
-              </button>
             </div>
           </div>
         </div>
@@ -1829,241 +1824,6 @@ export default function BudgetSimulator() {
               );
             })()}
 
-            {/* 取引入力 */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>取引を追加</h2>
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  {[
-                    { type: 'expense', label: '支出', color: theme.red },
-                    { type: 'income', label: '収入', color: theme.green },
-                  ].map(({ type, label, color }) => (
-                    <button key={type}
-                      onClick={() => setNewTransaction({ ...newTransaction, type, paymentMethod: type === 'expense' ? 'credit' : undefined })}
-                      className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all duration-200`}
-                      style={{
-                        backgroundColor: newTransaction.type === type ? color : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                        color: newTransaction.type === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
-                        transform: newTransaction.type === type ? 'scale(1.02)' : 'scale(1)',
-                      }}>
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {newTransaction.type === 'expense' && (
-                  <>
-                    <div className="flex gap-2">
-                      {[
-                        { key: 'credit', label: '💳 クレジット' },
-                        { key: 'cash', label: '💵 現金' },
-                      ].map(({ key, label }) => (
-                        <button key={key}
-                          onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: key, cardId: key === 'credit' ? (newTransaction.cardId || creditCards[0]?.id) : null })}
-                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200`}
-                          style={{
-                            backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#262626' : '#f0f0f0'),
-                            color: newTransaction.paymentMethod === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
-                          }}>
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {newTransaction.paymentMethod === 'credit' && creditCards.length > 1 && (
-                      <div className="flex gap-1.5 flex-wrap">
-                        {creditCards.map(card => (
-                          <button key={card.id}
-                            onClick={() => setNewTransaction({ ...newTransaction, cardId: card.id })}
-                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all`}
-                            style={{
-                              backgroundColor: (newTransaction.cardId || creditCards[0]?.id) === card.id ? theme.accent : (darkMode ? '#2a2a2a' : '#f0f0f0'),
-                              color: (newTransaction.cardId || creditCards[0]?.id) === card.id ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
-                            }}>
-                            {card.name}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* 金額入力（大きく） */}
-                <div className={`rounded-xl px-4 py-3 ${darkMode ? 'bg-neutral-800/80 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
-                  <p className={`text-xs font-medium ${theme.textSecondary} mb-1`}>金額</p>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xl font-bold ${theme.textSecondary}`}>¥</span>
-                    <input type="text" inputMode="numeric" placeholder="0"
-                      value={newTransaction.amount}
-                      onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value.replace(/[^0-9]/g, '') })}
-                      className={`flex-1 bg-transparent text-2xl font-bold tabular-nums ${theme.text} focus:outline-none placeholder-neutral-500`}
-                      style={{ minWidth: 0 }}
-                    />
-                    {newTransaction.amount && (
-                      <button onClick={() => setNewTransaction({...newTransaction, amount: ''})}
-                        className={`text-xs px-2 py-1 rounded-lg ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>✕</button>
-                    )}
-                  </div>
-                  {newTransaction.amount && (
-                    <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>
-                      {Number(newTransaction.amount).toLocaleString()} 円
-                    </p>
-                  )}
-                </div>
-                {/* 日付選択 */}
-                <input type="date" value={newTransaction.date}
-                  onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-                  className={`w-full px-3 py-2.5 rounded-xl appearance-none ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
-                  style={{ colorScheme: darkMode ? 'dark' : 'light' }} />
-
-                <select value={newTransaction.category}
-                  onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}>
-                  <option value="">カテゴリを選択</option>
-                  {(newTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-
-                <textarea
-                  rows={2}
-                  placeholder="メモ（任意）"
-                  value={newTransaction.memo}
-                  onChange={(e) => setNewTransaction({ ...newTransaction, memo: e.target.value })}
-                  className={`w-full px-3 py-2 rounded-xl text-sm resize-none ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-200 placeholder-neutral-400'
-                  } focus:outline-none focus:border-blue-500`}
-                ></textarea>
-
-                {/* 立替あり トグル */}
-                {newTransaction.type === 'expense' && (
-                  <div className={`rounded-xl overflow-hidden border ${darkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
-                    <button
-                      onClick={() => setNewTransaction({
-                        ...newTransaction,
-                        isSplit: !newTransaction.isSplit,
-                        splitMembers: !newTransaction.isSplit ? [{ name: '', amount: '' }] : []
-                      })}
-                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium transition-all ${
-                        newTransaction.isSplit
-                          ? (darkMode ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-50 text-blue-700')
-                          : (darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-50 text-neutral-500')
-                      }`}
-                    >
-                      <span>👥 複数人分を立替払い</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${newTransaction.isSplit ? 'bg-blue-500 text-white' : (darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500')}`}>
-                        {newTransaction.isSplit ? `${newTransaction.splitMembers.filter(m=>m.name||m.amount).length}人` : 'OFF'}
-                      </span>
-                    </button>
-
-                    {newTransaction.isSplit && (
-                      <div className={`px-3 pb-3 pt-2 space-y-2 ${darkMode ? 'bg-neutral-800/50' : 'bg-blue-50/50'}`}>
-                        <div className="flex items-center justify-between">
-                          <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                            立替分は回収するまでPLから除外されます。
-                          </p>
-                          {newTransaction.amount && newTransaction.splitMembers.length > 0 && (
-                            <button
-                              onClick={() => {
-                                const total = Number(newTransaction.amount);
-                                const n = newTransaction.splitMembers.length + 1; // 自分も含む
-                                const perPerson = Math.floor(total / n);
-                                setNewTransaction({
-                                  ...newTransaction,
-                                  splitMembers: newTransaction.splitMembers.map(m => ({ ...m, amount: String(perPerson) }))
-                                });
-                              }}
-                              className={`text-xs px-2.5 py-1 rounded-lg font-semibold shrink-0 transition-all ${darkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-600'}`}
-                            >
-                              ÷ 均等割り
-                            </button>
-                          )}
-                        </div>
-
-                        {/* 人ごとの入力行 */}
-                        <div className="space-y-1.5">
-                          {newTransaction.splitMembers.map((member, idx) => (
-                            <div key={idx} className="flex gap-1.5 items-center">
-                              <input
-                                type="text"
-                                placeholder={`${idx+1}人目の名前`}
-                                value={member.name}
-                                onChange={(e) => {
-                                  const updated = [...newTransaction.splitMembers];
-                                  updated[idx] = { ...updated[idx], name: e.target.value };
-                                  setNewTransaction({ ...newTransaction, splitMembers: updated });
-                                }}
-                                className={`flex-1 px-2.5 py-1.5 rounded-lg text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-300 placeholder-neutral-400'} focus:outline-none`}
-                              />
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                placeholder="金額"
-                                value={member.amount}
-                                onChange={(e) => {
-                                  const updated = [...newTransaction.splitMembers];
-                                  updated[idx] = { ...updated[idx], amount: e.target.value.replace(/[^0-9]/g, '') };
-                                  setNewTransaction({ ...newTransaction, splitMembers: updated });
-                                }}
-                                className={`w-24 px-2.5 py-1.5 rounded-lg text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-300 placeholder-neutral-400'} focus:outline-none`}
-                              />
-                              {newTransaction.splitMembers.length > 1 && (
-                                <button
-                                  onClick={() => setNewTransaction({
-                                    ...newTransaction,
-                                    splitMembers: newTransaction.splitMembers.filter((_, i) => i !== idx)
-                                  })}
-                                  className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold shrink-0 ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-500'}`}
-                                >✕</button>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* 人を追加ボタン */}
-                        <button
-                          onClick={() => setNewTransaction({
-                            ...newTransaction,
-                            splitMembers: [...newTransaction.splitMembers, { name: '', amount: '' }]
-                          })}
-                          className={`w-full py-1.5 rounded-lg text-xs font-semibold border-dashed border-2 transition-all ${darkMode ? 'border-neutral-600 text-neutral-400 hover:border-blue-500 hover:text-blue-400' : 'border-neutral-300 text-neutral-400 hover:border-blue-400 hover:text-blue-500'}`}
-                        >
-                          ＋ 人を追加
-                        </button>
-
-                        {/* 内訳サマリー */}
-                        {(() => {
-                          const total = Number(newTransaction.amount) || 0;
-                          const splitTotal = newTransaction.splitMembers.reduce((s, m) => s + (Number(m.amount) || 0), 0);
-                          const mine = total - splitTotal;
-                          if (total === 0) return null;
-                          return (
-                            <div className={`rounded-lg px-3 py-2 text-xs space-y-0.5 ${darkMode ? 'bg-neutral-900/60' : 'bg-white/80'}`}>
-                              <div className="flex justify-between">
-                                <span className={theme.textSecondary}>合計</span>
-                                <span className={`font-bold tabular-nums ${theme.text}`}>¥{total.toLocaleString()}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className={theme.textSecondary}>立替合計（{newTransaction.splitMembers.filter(m=>Number(m.amount)>0).length}人）</span>
-                                <span className="font-bold tabular-nums" style={{color: theme.accent}}>¥{splitTotal.toLocaleString()}</span>
-                              </div>
-                              <div className={`flex justify-between pt-1 border-t ${theme.border}`}>
-                                <span className={`font-semibold ${theme.text}`}>自分の負担</span>
-                                <span className={`font-bold tabular-nums`} style={{color: mine >= 0 ? theme.green : theme.red}}>¥{mine.toLocaleString()}</span>
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </div>
-                )}
-                <button onClick={addTransaction}
-                  className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
-                  style={{ backgroundColor: theme.accent }}>
-                  追加する
-                </button>
-              </div>
-            </div>
 
             {/* 定期支払い */}
             <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
@@ -2718,9 +2478,14 @@ export default function BudgetSimulator() {
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <p className={`text-[10px] ${theme.textSecondary} mb-1 font-medium uppercase tracking-wide`}>
-                    同世代比較（{getAgeGroup()==='20s'?'20代':getAgeGroup()==='30s'?'30代':getAgeGroup()==='40s'?'40代':getAgeGroup()==='50s'?'50代':'60代以上'}）
+                    {userInfo?.age ? `同世代比較（${getAgeGroup()==='20s'?'20代':getAgeGroup()==='30s'?'30代':getAgeGroup()==='40s'?'40代':getAgeGroup()==='50s'?'50代':'60代以上'}）` : '同世代比較'}
                   </p>
                   <div className="flex items-center gap-2">
+                    {!userInfo?.age && (
+                      <button onClick={() => setActiveTab('settings')} className={`text-xs px-2 py-1 rounded-lg mb-1 ${darkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                        ⚙ 年齢を設定すると同世代と比較できます
+                      </button>
+                    )}
                     <p className="text-xl font-bold tabular-nums" style={{ color: calculateBenchmark().isAboveAverage ? theme.green : theme.red }}>
                       {calculateBenchmark().isAboveAverage?'+':''}{(calculateBenchmark().difference/10000).toFixed(0)}万円
                     </p>
@@ -2741,10 +2506,10 @@ export default function BudgetSimulator() {
               <div className="flex items-center justify-between mb-3">
                 <h2 className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>今月の収支</h2>
                 <button
-                  onClick={() => setShowBudgetModal(true)}
+                  onClick={() => setActiveTab('settings')}
                   className={`text-xs px-2.5 py-1 rounded-lg font-medium ${darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-500'}`}
                 >
-                  予算設定
+                  予算設定 →
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2 mb-3">
@@ -2869,231 +2634,16 @@ export default function BudgetSimulator() {
                 ))}
               </div>
             </div>
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>設定</h2>
-              
-              <div className="space-y-4">
-                <div>
-                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
-                    目標金額: ¥{simulationSettings.targetAmount.toLocaleString()}
-                  </label>
-                  <input
-                    type="range"
-                    min="1000000"
-                    max="100000000"
-                    step="1000000"
-                    value={simulationSettings.targetAmount}
-                    onChange={(e) => setSimulationSettings({ ...simulationSettings, targetAmount: Number(e.target.value) })}
-                    className="w-full accent-slider"
-                    style={{ accentColor: theme.accent }}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
-                    運用期間: {simulationSettings.years}年
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="30"
-                    value={simulationSettings.years}
-                    onChange={(e) => setSimulationSettings({ ...simulationSettings, years: Number(e.target.value) })}
-                    className="w-full accent-slider"
-                    style={{ accentColor: theme.accent }}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
-                    月々の貯金: ¥{simulationSettings.monthlySavings.toLocaleString()}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="200000"
-                    step="10000"
-                    value={simulationSettings.monthlySavings}
-                    onChange={(e) => setSimulationSettings({ ...simulationSettings, monthlySavings: Number(e.target.value) })}
-                    className="w-full accent-slider"
-                    style={{ accentColor: theme.accent }}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
-                    月々の積立投資: ¥{simulationSettings.monthlyInvestment.toLocaleString()}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="200000"
-                    step="10000"
-                    value={simulationSettings.monthlyInvestment}
-                    onChange={(e) => setSimulationSettings({ ...simulationSettings, monthlyInvestment: Number(e.target.value) })}
-                    className="w-full accent-slider"
-                    style={{ accentColor: theme.accent }}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
-                    想定利回り: {simulationSettings.returnRate}%
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    step="0.5"
-                    value={simulationSettings.returnRate}
-                    onChange={(e) => setSimulationSettings({ ...simulationSettings, returnRate: Number(e.target.value) })}
-                    className="w-full accent-slider"
-                    style={{ accentColor: theme.accent }}
-                  />
-                </div>
-
-                <div>
-                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
-                    預金金利: {simulationSettings.savingsInterestRate}%
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max="5"
-                    step="0.1"
-                    value={simulationSettings.savingsInterestRate}
-                    onChange={(e) => setSimulationSettings({ ...simulationSettings, savingsInterestRate: Number(e.target.value) })}
-                    className="w-full accent-slider"
-                    style={{ accentColor: theme.accent }}
-                  />
-                  <p className={`text-xs ${theme.textSecondary} mt-1`}>普通預金・定期預金の金利を設定</p>
-                </div>
-
-                <div className="border-t pt-3" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className={`text-xs font-medium ${theme.text}`}>新NISA制度を利用</label>
-                    <button
-                      onClick={() => setSimulationSettings({ ...simulationSettings, useNisa: !simulationSettings.useNisa })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        simulationSettings.useNisa ? 'bg-green-500' : darkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          simulationSettings.useNisa ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  {simulationSettings.useNisa && (
-                    <div className={`${darkMode ? 'bg-gray-800' : 'bg-green-50'} rounded-lg p-2 text-xs`}>
-                      <p className={`${darkMode ? 'text-green-400' : 'text-green-800'} font-bold mb-1`}>🎯 新NISA</p>
-                      <p className={darkMode ? 'text-gray-400' : 'text-green-700'}>
-                        • つみたて: 年360万円<br/>
-                        • 成長投資: 年240万円<br/>
-                        • 生涯: 1,800万円
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t pt-3" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className={`text-xs font-medium ${theme.text}`}>成長投資（一括）</label>
-                    <button
-                      onClick={() => setSimulationSettings({ ...simulationSettings, useLumpSum: !simulationSettings.useLumpSum })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        simulationSettings.useLumpSum ? 'bg-purple-500' : darkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          simulationSettings.useLumpSum ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-
-                  {simulationSettings.useLumpSum && (
-                    <div className="space-y-3">
-                      <div>
-                        <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>
-                          1回あたり: ¥{simulationSettings.lumpSumAmount.toLocaleString()}
-                        </label>
-                        <input
-                          type="range"
-                          min="100000"
-                          max="2000000"
-                          step="100000"
-                          value={simulationSettings.lumpSumAmount}
-                          onChange={(e) => setSimulationSettings({ ...simulationSettings, lumpSumAmount: Number(e.target.value) })}
-                          className="w-full accent-slider"
-                          style={{ accentColor: theme.accent }}
-                        />
-                      </div>
-
-                      <div>
-                        <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>投資月を選択</label>
-                        <div className="grid grid-cols-6 gap-1">
-                          {[1,2,3,4,5,6,7,8,9,10,11,12].map(month => (
-                            <button
-                              key={month}
-                              onClick={() => {
-                                const months = simulationSettings.lumpSumMonths || [];
-                                const newMonths = months.includes(month)
-                                  ? months.filter(m => m !== month)
-                                  : [...months, month].sort((a, b) => a - b);
-                                setSimulationSettings({ ...simulationSettings, lumpSumMonths: newMonths });
-                              }}
-                              className={`py-1 rounded text-xs font-medium transition-all ${
-                                (simulationSettings.lumpSumMonths || []).includes(month)
-                                  ? 'bg-purple-500 text-white'
-                                  : darkMode ? 'bg-gray-800 text-gray-400' : 'bg-gray-100 text-gray-600'
-                              }`}
-                            >
-                              {month}月
-                            </button>
-                          ))}
-                        </div>
-                        <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>
-                          年間合計: ¥{(simulationSettings.lumpSumAmount * (simulationSettings.lumpSumMonths?.length || 0)).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t pt-3" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <label className={`text-xs font-medium ${theme.text}`}>100通りの未来予測</label>
-                      <p className={`text-xs ${theme.textSecondary}`}>相場の荒波を考慮</p>
-                    </div>
-                    <button
-                      onClick={() => setSimulationSettings({ ...simulationSettings, showMonteCarloSimulation: !simulationSettings.showMonteCarloSimulation })}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        simulationSettings.showMonteCarloSimulation ? 'bg-blue-500' : darkMode ? 'bg-gray-700' : 'bg-gray-300'
-                      }`}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          simulationSettings.showMonteCarloSimulation ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                  </div>
-                  {simulationSettings.showMonteCarloSimulation && (
-                    <div className={`${darkMode ? 'bg-blue-900 bg-opacity-20' : 'bg-blue-50'} rounded-lg p-2 text-xs`}>
-                      <p className={`${darkMode ? 'text-blue-400' : 'text-blue-800'} font-bold mb-1`}>📊 相場の振れ幅</p>
-                      <p className={darkMode ? 'text-gray-400' : 'text-blue-700'}>
-                        市場の変動を100回シミュレーション。<br/>
-                        最も起こりそうな範囲を表示します。
-                      </p>
-                    </div>
-                  )}
-                </div>
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`w-full ${theme.cardGlass} rounded-xl p-4 flex items-center justify-between hover-scale transition-all`}
+            >
+              <div className="text-left">
+                <p className={`text-sm font-semibold ${theme.text}`}>積立・投資目標の設定</p>
+                <p className={`text-xs ${theme.textSecondary} mt-0.5`}>目標金額・運用期間・利回りなど</p>
               </div>
-            </div>
+              <span className={`text-lg ${theme.textSecondary}`}>›</span>
+            </button>
 
             <div className={`${theme.cardGlass} rounded-xl p-4`}>
               <div className="flex items-center justify-between mb-3">
@@ -3348,6 +2898,240 @@ export default function BudgetSimulator() {
                 </ResponsiveContainer>
               </div>
             </div>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="space-y-3 animate-fadeIn pb-6">
+
+            {/* 外観 */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>外観</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className={`text-sm font-semibold ${theme.text}`}>ダークモード</p>
+                  <p className={`text-xs ${theme.textSecondary} mt-0.5`}>{darkMode ? 'ON' : 'OFF'}</p>
+                </div>
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${darkMode ? 'bg-blue-500' : 'bg-neutral-300'}`}
+                >
+                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${darkMode ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* プロフィール */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>プロフィール</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>名前</label>
+                  <input type="text" value={userInfo?.name || ''} onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                </div>
+                <div>
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>年齢</label>
+                  <input type="number" value={userInfo?.age || ''} onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                </div>
+              </div>
+              {!userInfo?.age && (
+                <p className={`text-xs mt-2 px-2 py-1.5 rounded-lg ${darkMode ? 'bg-blue-500/10 text-blue-400' : 'bg-blue-50 text-blue-600'}`}>
+                  💡 年齢を設定すると資産タブで同世代比較が使えます
+                </p>
+              )}
+            </div>
+
+            {/* 月間予算設定 */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>月間予算</p>
+              <div className="space-y-3">
+                <div>
+                  <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>月間収入予定</label>
+                  <input
+                    type="text" inputMode="numeric"
+                    value={monthlyBudget.income}
+                    onChange={(e) => setMonthlyBudget({ ...monthlyBudget, income: Number(e.target.value.replace(/[^0-9]/g, '')) })}
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                  />
+                  <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{monthlyBudget.income.toLocaleString()}</p>
+                </div>
+                <div className={`border-t pt-3`} style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
+                  <p className={`text-xs font-semibold ${theme.text} mb-2`}>カテゴリ別予算</p>
+                  <div className="space-y-2">
+                    {Object.entries(monthlyBudget.expenses).map(([category, amount]) => (
+                      <div key={category}>
+                        <div className="flex justify-between mb-1">
+                          <label className={`text-xs font-medium ${theme.textSecondary}`}>{category}</label>
+                          <span className={`text-xs font-bold tabular-nums ${theme.text}`}>¥{amount.toLocaleString()}</span>
+                        </div>
+                        <input type="range" min="0" max="200000" step="5000" value={amount}
+                          onChange={(e) => setMonthlyBudget({ ...monthlyBudget, expenses: { ...monthlyBudget.expenses, [category]: Number(e.target.value) } })}
+                          className="w-full" style={{ accentColor: theme.accent }} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className={`rounded-lg p-3 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className={theme.textSecondary}>予算合計支出</span>
+                    <span className={`font-bold tabular-nums ${theme.text}`}>¥{Object.values(monthlyBudget.expenses).reduce((a,b)=>a+b,0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className={theme.textSecondary}>予算収支</span>
+                    <span className={`font-bold tabular-nums`} style={{ color: monthlyBudget.income - Object.values(monthlyBudget.expenses).reduce((a,b)=>a+b,0) >= 0 ? theme.green : theme.red }}>
+                      ¥{(monthlyBudget.income - Object.values(monthlyBudget.expenses).reduce((a,b)=>a+b,0)).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 積立・投資目標 */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>積立・投資目標</p>
+              <div className="space-y-4">
+                {[
+                  { key: 'targetAmount', label: '目標金額', min: 1000000, max: 100000000, step: 1000000, fmt: v => `¥${(v/10000).toFixed(0)}万` },
+                  { key: 'years', label: '運用期間', min: 1, max: 30, step: 1, fmt: v => `${v}年` },
+                  { key: 'monthlySavings', label: '月々の貯金', min: 0, max: 200000, step: 10000, fmt: v => `¥${v.toLocaleString()}` },
+                  { key: 'monthlyInvestment', label: '月々の積立投資', min: 0, max: 200000, step: 10000, fmt: v => `¥${v.toLocaleString()}` },
+                  { key: 'returnRate', label: '想定利回り', min: 1, max: 10, step: 0.5, fmt: v => `${v}%` },
+                  { key: 'savingsInterestRate', label: '預金金利', min: 0, max: 5, step: 0.1, fmt: v => `${v}%` },
+                ].map(({ key, label, min, max, step, fmt }) => (
+                  <div key={key}>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className={`text-xs font-medium ${theme.textSecondary}`}>{label}</label>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text" inputMode="decimal"
+                          value={simulationSettings[key]}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value.replace(/[^0-9.]/g, ''));
+                            if (!isNaN(v)) setSimulationSettings({ ...simulationSettings, [key]: Math.min(max, Math.max(min, v)) });
+                          }}
+                          className={`w-24 px-2 py-1 rounded-lg text-xs font-bold tabular-nums text-right ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                        />
+                      </div>
+                    </div>
+                    <input type="range" min={min} max={max} step={step} value={simulationSettings[key]}
+                      onChange={(e) => setSimulationSettings({ ...simulationSettings, [key]: Number(e.target.value) })}
+                      className="w-full" style={{ accentColor: theme.accent }} />
+                    <p className={`text-[10px] text-right ${theme.textSecondary} -mt-0.5`}>{fmt(simulationSettings[key])}</p>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-2 border-t" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
+                  <label className={`text-xs font-medium ${theme.text}`}>新NISA制度を利用</label>
+                  <button onClick={() => setSimulationSettings({ ...simulationSettings, useNisa: !simulationSettings.useNisa })}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${simulationSettings.useNisa ? 'bg-green-500' : darkMode ? 'bg-gray-700' : 'bg-gray-300'}`}>
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${simulationSettings.useNisa ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                </div>
+                {simulationSettings.useNisa && (
+                  <div className={`${darkMode ? 'bg-gray-800' : 'bg-green-50'} rounded-lg p-2 text-xs`}>
+                    <p className={`${darkMode ? 'text-green-400' : 'text-green-700'} font-medium`}>✓ NISA口座で運用（利益非課税）</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* カテゴリ管理 */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>カテゴリ管理</p>
+              <div className="flex gap-2 mb-3">
+                {['expense', 'income'].map(type => (
+                  <button key={type} onClick={() => setNewCategoryType(type)}
+                    className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
+                    style={{ backgroundColor: newCategoryType === type ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'), color: newCategoryType === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373') }}>
+                    {type === 'expense' ? '支出カテゴリ' : '収入カテゴリ'}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 mb-3">
+                <input type="text" placeholder="新しいカテゴリ名" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)}
+                  className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                <button onClick={() => {
+                    if (!newCategoryName.trim()) return;
+                    if (newCategoryType === 'expense') setCustomCategories(prev => ({ ...prev, expense: [...prev.expense, newCategoryName.trim()] }));
+                    else setCustomCategories(prev => ({ ...prev, income: [...prev.income, newCategoryName.trim()] }));
+                    setNewCategoryName('');
+                  }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
+                  style={{ backgroundColor: theme.accent }}>追加</button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(newCategoryType === 'expense' ? expenseCategories : incomeCategories).map(cat => (
+                  <span key={cat} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-100 text-neutral-700'}`}>
+                    {cat}
+                    {(newCategoryType === 'expense' ? customCategories.expense : customCategories.income).includes(cat) && (
+                      <button onClick={() => {
+                          if (newCategoryType === 'expense') setCustomCategories(prev => ({ ...prev, expense: prev.expense.filter(c => c !== cat) }));
+                          else setCustomCategories(prev => ({ ...prev, income: prev.income.filter(c => c !== cat) }));
+                        }}
+                        className="text-red-400 hover:text-red-600 ml-0.5 font-bold">×</button>
+                    )}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* クレジットカード */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <div className="flex items-center justify-between mb-3">
+                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest`}>クレジットカード</p>
+                <button onClick={() => { setEditingCard(null); setShowCardModal(true); }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: theme.accent }}>+ 追加</button>
+              </div>
+              {creditCards.length === 0 ? (
+                <p className={`text-xs text-center py-3 ${theme.textSecondary}`}>クレジットカードが登録されていません</p>
+              ) : (
+                <div className="space-y-2">
+                  {creditCards.map(card => (
+                    <div key={card.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
+                      <div>
+                        <p className={`text-sm font-semibold ${theme.text}`}>{card.name}</p>
+                        <p className={`text-xs ${theme.textSecondary}`}>締め日: {card.closingDay}日 / 支払い: 翌{card.paymentMonth === 2 ? '々' : ''}月{card.paymentDay}日</p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => { setEditingCard(card); setShowCardModal(true); }} className="p-1.5 rounded-lg text-blue-500">✏️</button>
+                        <button onClick={() => { if(confirm('削除しますか？')) setCreditCards(prev => prev.filter(c => c.id !== card.id)); }} className="p-1.5 rounded-lg text-red-500">🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* データ管理 */}
+            <div className={`${theme.cardGlass} rounded-xl p-4`}>
+              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>データ管理</p>
+              <div className="space-y-2">
+                <button
+                  onClick={() => {
+                    const data = { transactions, recurringTransactions, creditCards, monthlyBudget, simulationSettings, userInfo, assetData };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a'); a.href = url; a.download = `money-planner-${new Date().toISOString().slice(0,10)}.json`; a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className={`w-full py-2.5 rounded-xl text-sm font-semibold border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-300' : 'border-neutral-200 text-neutral-600'}`}
+                >
+                  📤 データをエクスポート
+                </button>
+                <button
+                  onClick={() => {
+                    if (!confirm('全データをリセットしますか？この操作は取り消せません。')) return;
+                    setTransactions([]); setRecurringTransactions([]); setMonthlyHistory({});
+                    setAssetData({ savings: 0, investments: 0, nisa: 0, dryPowder: 0 });
+                  }}
+                  className="w-full py-2.5 rounded-xl text-sm font-semibold border-2 border-red-500/30 text-red-500 transition-all hover-scale"
+                >
+                  🗑️ 全データをリセット
+                </button>
+              </div>
+            </div>
+
           </div>
         )}
       </div>
@@ -4955,215 +4739,250 @@ export default function BudgetSimulator() {
         </div>
       )}
 
-      {showSettings && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-end justify-center p-0 z-50 animate-fadeIn" onClick={() => setShowSettings(false)}>
-          <div className={`${theme.cardGlass} rounded-t-3xl w-full max-w-md max-h-[85vh] overflow-y-auto animate-slideUp`} onClick={e => e.stopPropagation()}>
-            <div className="sticky top-0 flex items-center justify-between px-6 pt-5 pb-3" style={{ backgroundColor: darkMode ? '#171717' : '#ffffff' }}>
-              <h2 className={`text-xl font-bold ${theme.text}`}>設定</h2>
-              <button onClick={() => setShowSettings(false)} className={`w-8 h-8 flex items-center justify-center rounded-full ${darkMode ? 'bg-neutral-800' : 'bg-neutral-100'} ${theme.text}`}>✕</button>
+      {/* FAB：取引追加モーダル */}
+      {showAddTransaction && (
+        <div className="fixed inset-0 bg-black/60 flex items-end justify-center z-50 animate-fadeIn" onClick={() => setShowAddTransaction(false)}>
+          <div className={`${theme.cardGlass} rounded-t-3xl w-full max-w-md max-h-[92vh] overflow-y-auto animate-slideUp`} onClick={e => e.stopPropagation()}>
+            <div className={`sticky top-0 flex items-center justify-between px-5 pt-4 pb-3 ${darkMode ? 'bg-neutral-900/95' : 'bg-white/95'} backdrop-blur-md border-b ${theme.border}`}>
+              <h2 className={`text-lg font-bold ${theme.text}`}>取引を追加</h2>
+              <button onClick={() => setShowAddTransaction(false)} className={`w-8 h-8 flex items-center justify-center rounded-full ${darkMode ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-100 text-neutral-600'} text-sm font-bold`}>✕</button>
             </div>
-            <div className="px-6 pb-8 space-y-6">
-
-              {/* プロフィール */}
-              <div>
-                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>プロフィール</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>名前</label>
-                    <input type="text" value={userInfo?.name || ''} onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
-                  </div>
-                  <div>
-                    <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>年齢</label>
-                    <input type="number" value={userInfo?.age || ''} onChange={(e) => setUserInfo({ ...userInfo, age: e.target.value })}
-                      className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
-                  </div>
-                </div>
-              </div>
-
-              {/* カテゴリ管理 */}
-              <div>
-                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>カテゴリ管理</p>
-                <div className="flex gap-2 mb-3">
-                  {['expense', 'income'].map(type => (
-                    <button key={type} onClick={() => setNewCategoryType(type)}
-                      className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all`}
+            <div className="px-4 pb-8 pt-4">
+              <div className="space-y-2">
+              <h2 className={`text-sm font-semibold ${theme.text} mb-3 uppercase tracking-wide`}>取引を追加</h2>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  {[
+                    { type: 'expense', label: '支出', color: theme.red },
+                    { type: 'income', label: '収入', color: theme.green },
+                  ].map(({ type, label, color }) => (
+                    <button key={type}
+                      onClick={() => setNewTransaction({ ...newTransaction, type, paymentMethod: type === 'expense' ? 'credit' : undefined })}
+                      className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all duration-200`}
                       style={{
-                        backgroundColor: newCategoryType === type ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
-                        color: newCategoryType === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
+                        backgroundColor: newTransaction.type === type ? color : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                        color: newTransaction.type === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
+                        transform: newTransaction.type === type ? 'scale(1.02)' : 'scale(1)',
                       }}>
-                      {type === 'expense' ? '支出カテゴリ' : '収入カテゴリ'}
+                      {label}
                     </button>
                   ))}
                 </div>
-                <div className="flex gap-2 mb-2">
-                  <input type="text" placeholder="新しいカテゴリ名" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)}
-                    className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
-                  <button onClick={addCustomCategory}
-                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-                    style={{ backgroundColor: theme.accent }}>追加</button>
-                </div>
-                {customCategories[newCategoryType].length > 0 && (
-                  <div className="space-y-1.5 mt-2">
-                    {customCategories[newCategoryType].map(cat => (
-                      <div key={cat} className={`flex items-center justify-between px-3 py-2 rounded-xl ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
-                        <span className={`text-sm ${theme.text}`}>{cat}</span>
-                        <button onClick={() => deleteCustomCategory(cat, newCategoryType)} className="text-red-400 hover:scale-110 transition-transform text-lg">🗑️</button>
+
+                {newTransaction.type === 'expense' && (
+                  <>
+                    <div className="flex gap-2">
+                      {[
+                        { key: 'credit', label: '💳 クレジット' },
+                        { key: 'cash', label: '💵 現金' },
+                      ].map(({ key, label }) => (
+                        <button key={key}
+                          onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: key, cardId: key === 'credit' ? (newTransaction.cardId || creditCards[0]?.id) : null })}
+                          className={`flex-1 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200`}
+                          style={{
+                            backgroundColor: newTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#262626' : '#f0f0f0'),
+                            color: newTransaction.paymentMethod === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
+                          }}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {newTransaction.paymentMethod === 'credit' && creditCards.length > 1 && (
+                      <div className="flex gap-1.5 flex-wrap">
+                        {creditCards.map(card => (
+                          <button key={card.id}
+                            onClick={() => setNewTransaction({ ...newTransaction, cardId: card.id })}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all`}
+                            style={{
+                              backgroundColor: (newTransaction.cardId || creditCards[0]?.id) === card.id ? theme.accent : (darkMode ? '#2a2a2a' : '#f0f0f0'),
+                              color: (newTransaction.cardId || creditCards[0]?.id) === card.id ? '#fff' : (darkMode ? '#d4d4d4' : '#737373')
+                            }}>
+                            {card.name}
+                          </button>
+                        ))}
                       </div>
-                    ))}
+                    )}
+                  </>
+                )}
+
+                {/* 金額入力（大きく） */}
+                <div className={`rounded-xl px-4 py-3 ${darkMode ? 'bg-neutral-800/80 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                  <p className={`text-xs font-medium ${theme.textSecondary} mb-1`}>金額</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xl font-bold ${theme.textSecondary}`}>¥</span>
+                    <input type="text" inputMode="numeric" placeholder="0"
+                      value={newTransaction.amount}
+                      onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value.replace(/[^0-9]/g, '') })}
+                      className={`flex-1 bg-transparent text-2xl font-bold tabular-nums ${theme.text} focus:outline-none placeholder-neutral-500`}
+                      style={{ minWidth: 0 }}
+                    />
+                    {newTransaction.amount && (
+                      <button onClick={() => setNewTransaction({...newTransaction, amount: ''})}
+                        className={`text-xs px-2 py-1 rounded-lg ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>✕</button>
+                    )}
+                  </div>
+                  {newTransaction.amount && (
+                    <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>
+                      {Number(newTransaction.amount).toLocaleString()} 円
+                    </p>
+                  )}
+                </div>
+                {/* 日付選択 */}
+                <input type="date" value={newTransaction.date}
+                  onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
+                  className={`w-full px-3 py-2.5 rounded-xl appearance-none ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                  style={{ colorScheme: darkMode ? 'dark' : 'light' }} />
+
+                <select value={newTransaction.category}
+                  onChange={(e) => setNewTransaction({ ...newTransaction, category: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}>
+                  <option value="">カテゴリを選択</option>
+                  {(newTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+
+                <textarea
+                  rows={2}
+                  placeholder="メモ（任意）"
+                  value={newTransaction.memo}
+                  onChange={(e) => setNewTransaction({ ...newTransaction, memo: e.target.value })}
+                  className={`w-full px-3 py-2 rounded-xl text-sm resize-none ${
+                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-200 placeholder-neutral-400'
+                  } focus:outline-none focus:border-blue-500`}
+                ></textarea>
+
+                {/* 立替あり トグル */}
+                {newTransaction.type === 'expense' && (
+                  <div className={`rounded-xl overflow-hidden border ${darkMode ? 'border-neutral-700' : 'border-neutral-200'}`}>
+                    <button
+                      onClick={() => setNewTransaction({
+                        ...newTransaction,
+                        isSplit: !newTransaction.isSplit,
+                        splitMembers: !newTransaction.isSplit ? [{ name: '', amount: '' }] : []
+                      })}
+                      className={`w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium transition-all ${
+                        newTransaction.isSplit
+                          ? (darkMode ? 'bg-blue-900/30 text-blue-300' : 'bg-blue-50 text-blue-700')
+                          : (darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-50 text-neutral-500')
+                      }`}
+                    >
+                      <span>👥 複数人分を立替払い</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${newTransaction.isSplit ? 'bg-blue-500 text-white' : (darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500')}`}>
+                        {newTransaction.isSplit ? `${newTransaction.splitMembers.filter(m=>m.name||m.amount).length}人` : 'OFF'}
+                      </span>
+                    </button>
+
+                    {newTransaction.isSplit && (
+                      <div className={`px-3 pb-3 pt-2 space-y-2 ${darkMode ? 'bg-neutral-800/50' : 'bg-blue-50/50'}`}>
+                        <div className="flex items-center justify-between">
+                          <p className={`text-xs ${darkMode ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                            立替分は回収するまでPLから除外されます。
+                          </p>
+                          {newTransaction.amount && newTransaction.splitMembers.length > 0 && (
+                            <button
+                              onClick={() => {
+                                const total = Number(newTransaction.amount);
+                                const n = newTransaction.splitMembers.length + 1; // 自分も含む
+                                const perPerson = Math.floor(total / n);
+                                setNewTransaction({
+                                  ...newTransaction,
+                                  splitMembers: newTransaction.splitMembers.map(m => ({ ...m, amount: String(perPerson) }))
+                                });
+                              }}
+                              className={`text-xs px-2.5 py-1 rounded-lg font-semibold shrink-0 transition-all ${darkMode ? 'bg-blue-900/40 text-blue-300' : 'bg-blue-100 text-blue-600'}`}
+                            >
+                              ÷ 均等割り
+                            </button>
+                          )}
+                        </div>
+
+                        {/* 人ごとの入力行 */}
+                        <div className="space-y-1.5">
+                          {newTransaction.splitMembers.map((member, idx) => (
+                            <div key={idx} className="flex gap-1.5 items-center">
+                              <input
+                                type="text"
+                                placeholder={`${idx+1}人目の名前`}
+                                value={member.name}
+                                onChange={(e) => {
+                                  const updated = [...newTransaction.splitMembers];
+                                  updated[idx] = { ...updated[idx], name: e.target.value };
+                                  setNewTransaction({ ...newTransaction, splitMembers: updated });
+                                }}
+                                className={`flex-1 px-2.5 py-1.5 rounded-lg text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-300 placeholder-neutral-400'} focus:outline-none`}
+                              />
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                placeholder="金額"
+                                value={member.amount}
+                                onChange={(e) => {
+                                  const updated = [...newTransaction.splitMembers];
+                                  updated[idx] = { ...updated[idx], amount: e.target.value.replace(/[^0-9]/g, '') };
+                                  setNewTransaction({ ...newTransaction, splitMembers: updated });
+                                }}
+                                className={`w-24 px-2.5 py-1.5 rounded-lg text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-300 placeholder-neutral-400'} focus:outline-none`}
+                              />
+                              {newTransaction.splitMembers.length > 1 && (
+                                <button
+                                  onClick={() => setNewTransaction({
+                                    ...newTransaction,
+                                    splitMembers: newTransaction.splitMembers.filter((_, i) => i !== idx)
+                                  })}
+                                  className={`w-7 h-7 flex items-center justify-center rounded-full text-xs font-bold shrink-0 ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-500'}`}
+                                >✕</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* 人を追加ボタン */}
+                        <button
+                          onClick={() => setNewTransaction({
+                            ...newTransaction,
+                            splitMembers: [...newTransaction.splitMembers, { name: '', amount: '' }]
+                          })}
+                          className={`w-full py-1.5 rounded-lg text-xs font-semibold border-dashed border-2 transition-all ${darkMode ? 'border-neutral-600 text-neutral-400 hover:border-blue-500 hover:text-blue-400' : 'border-neutral-300 text-neutral-400 hover:border-blue-400 hover:text-blue-500'}`}
+                        >
+                          ＋ 人を追加
+                        </button>
+
+                        {/* 内訳サマリー */}
+                        {(() => {
+                          const total = Number(newTransaction.amount) || 0;
+                          const splitTotal = newTransaction.splitMembers.reduce((s, m) => s + (Number(m.amount) || 0), 0);
+                          const mine = total - splitTotal;
+                          if (total === 0) return null;
+                          return (
+                            <div className={`rounded-lg px-3 py-2 text-xs space-y-0.5 ${darkMode ? 'bg-neutral-900/60' : 'bg-white/80'}`}>
+                              <div className="flex justify-between">
+                                <span className={theme.textSecondary}>合計</span>
+                                <span className={`font-bold tabular-nums ${theme.text}`}>¥{total.toLocaleString()}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className={theme.textSecondary}>立替合計（{newTransaction.splitMembers.filter(m=>Number(m.amount)>0).length}人）</span>
+                                <span className="font-bold tabular-nums" style={{color: theme.accent}}>¥{splitTotal.toLocaleString()}</span>
+                              </div>
+                              <div className={`flex justify-between pt-1 border-t ${theme.border}`}>
+                                <span className={`font-semibold ${theme.text}`}>自分の負担</span>
+                                <span className={`font-bold tabular-nums`} style={{color: mine >= 0 ? theme.green : theme.red}}>¥{mine.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
                   </div>
                 )}
+                <button onClick={() => { addTransaction(); if(newTransaction.amount && newTransaction.category) setShowAddTransaction(false); }}
+                  className="w-full py-3 rounded-xl font-semibold text-white transition-all duration-200 hover-scale"
+                  style={{ backgroundColor: theme.accent }}>
+                  追加する
+                </button>
               </div>
 
-              {/* クレジットカード管理 */}
-              <div>
-                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>クレジットカード</p>
-                <div className="space-y-2">
-                  {creditCards.map((card, i) => (
-                    <div key={card.id} className={`rounded-xl p-3 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'} space-y-2`}>
-                      <div className="flex items-center justify-between">
-                        <input
-                          type="text"
-                          value={card.name}
-                          onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, name: e.target.value} : c))}
-                          className={`flex-1 px-2 py-1 rounded-lg text-sm font-semibold ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none mr-2`}
-                          placeholder="カード名"
-                        />
-                        {creditCards.length > 1 && (
-                          <button
-                            onClick={() => setCreditCards(prev => prev.filter(c => c.id !== card.id))}
-                            className={`w-7 h-7 flex items-center justify-center rounded-full text-xs ${darkMode ? 'bg-neutral-700 text-neutral-300' : 'bg-neutral-200 text-neutral-500'}`}
-                          >✕</button>
-                        )}
-                      </div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <div>
-                          <label className={`block text-xs ${theme.textSecondary} mb-1`}>締め日</label>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number" min="1" max="31"
-                              value={card.closingDay}
-                              onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, closingDay: Number(e.target.value)} : c))}
-                              className={`w-full px-2 py-1.5 rounded-lg text-sm text-center tabular-nums ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
-                            />
-                            <span className={`text-xs ${theme.textSecondary} shrink-0`}>日</span>
-                          </div>
-                        </div>
-                        <div>
-                          <label className={`block text-xs ${theme.textSecondary} mb-1`}>引落月</label>
-                          <select
-                            value={card.paymentMonth ?? 1}
-                            onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, paymentMonth: Number(e.target.value)} : c))}
-                            className={`w-full px-2 py-1.5 rounded-lg text-xs ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
-                          >
-                            <option value={1}>翌月</option>
-                            <option value={2}>翌々月</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className={`block text-xs ${theme.textSecondary} mb-1`}>引落日</label>
-                          <div className="flex items-center gap-1">
-                            <input
-                              type="number" min="1" max="31"
-                              value={card.paymentDay}
-                              onChange={e => setCreditCards(prev => prev.map(c => c.id === card.id ? {...c, paymentDay: Number(e.target.value)} : c))}
-                              className={`w-full px-2 py-1.5 rounded-lg text-sm text-center tabular-nums ${darkMode ? 'bg-neutral-700 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
-                            />
-                            <span className={`text-xs ${theme.textSecondary} shrink-0`}>日</span>
-                          </div>
-                        </div>
-                      </div>
-                      <p className={`text-xs ${theme.textSecondary}`}>
-                        {card.closingDay}日締め → {card.paymentMonth === 1 ? '翌月' : '翌々月'}{card.paymentDay}日引落
-                      </p>
-                    </div>
-                  ))}
-                  <button
-                    onClick={() => setCreditCards(prev => [...prev, {
-                      id: Date.now(),
-                      name: `カード${prev.length + 1}`,
-                      closingDay: 15,
-                      paymentMonth: 1,
-                      paymentDay: 10
-                    }])}
-                    className={`w-full py-2.5 rounded-xl text-sm font-semibold border-dashed border-2 transition-all ${darkMode ? 'border-neutral-600 text-neutral-400 hover:border-blue-500 hover:text-blue-400' : 'border-neutral-300 text-neutral-500 hover:border-blue-400 hover:text-blue-500'}`}
-                  >
-                    ＋ カードを追加
-                  </button>
-                </div>
               </div>
-
-              {/* データ管理 */}
-              <div>
-                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>データ管理</p>
-                <div className="space-y-2">
-                  <div
-                    className={`flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-medium border-2 cursor-pointer transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
-                    onClick={() => document.getElementById('import-file-input').click()}
-                  >
-                    📁 CSVをインポート
-                  </div>
-                  <input
-                    id="import-file-input"
-                    type="file"
-                    accept=".csv,.json"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      const reader = new FileReader();
-                      reader.onload = (ev) => {
-                        try {
-                          const raw = ev.target.result;
-                          if (file.name.endsWith('.json')) {
-                            const d = JSON.parse(raw);
-                            if (d.transactions) setTransactions(d.transactions);
-                            if (d.assetData) setAssetData(d.assetData);
-                            alert('インポートが完了しました！');
-                          } else if (file.name.endsWith('.csv')) {
-                            const lines = raw.split('\n');
-                            const imported = [];
-                            for (let i = 1; i < lines.length; i++) {
-                              const line = lines[i].trim();
-                              if (!line) continue;
-                              const [dt, cat, amt, tp] = line.split(',');
-                              if (!dt || !cat || !amt) continue;
-                              imported.push({ id: Date.now() + i, date: dt.trim(), category: cat.trim(), amount: parseFloat(amt.trim()), type: tp?.trim() === 'income' ? 'income' : 'expense', settled: true });
-                            }
-                            if (imported.length > 0) {
-                              setTransactions([...imported, ...transactions]);
-                              alert(imported.length + '件インポートしました！');
-                            }
-                          }
-                        } catch(err) { alert('インポートに失敗しました'); }
-                      };
-                      reader.readAsText(file);
-                    }}
-                  />
-                  <button
-                    onClick={() => {
-                      const data = JSON.stringify({ transactions, assetData, monthlyBudget, recurringTransactions, lifeEvents, simulationSettings }, null, 2);
-                      const blob = new Blob([data], { type: 'application/json' });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = 'money_planner_backup.json';
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                    className={`w-full py-3 rounded-xl text-sm font-medium border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-400' : 'border-neutral-200 text-neutral-600'}`}
-                  >
-                    💾 データをバックアップ
-                  </button>
-                  <button
-                    onClick={resetAllData}
-                    className="w-full py-3 rounded-xl text-sm font-semibold text-red-500 border-2 border-red-500/30 transition-all hover-scale"
-                  >
-                    🗑️ 全データをリセット
-                  </button>
-                </div>
-              </div>
-
             </div>
           </div>
         </div>
@@ -5422,6 +5241,14 @@ export default function BudgetSimulator() {
                   {!editingTransaction.splitSettled && (
                     <p className={`text-xs mt-2 ${theme.textSecondary}`}>⏳ ホームの「立替待ち」リストから人ごとに精算できます</p>
                   )}
+                  {transactions.length > recentTxnLimit && (
+                    <button
+                      onClick={() => setRecentTxnLimit(prev => prev + 10)}
+                      className={`w-full mt-2 py-2 rounded-xl text-xs font-semibold transition-all ${darkMode ? 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'}`}
+                    >
+                      もっと見る（残り{transactions.length - recentTxnLimit}件）
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -5458,6 +5285,19 @@ export default function BudgetSimulator() {
         </div>
       )}
 
+      {/* FAB：取引追加ボタン */}
+      {activeTab !== 'settings' && (
+        <div className="fixed z-40" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)', right: '16px' }}>
+          <button
+            onClick={() => setShowAddTransaction(true)}
+            className="w-14 h-14 rounded-full text-white text-3xl font-light shadow-lg transition-all duration-200 flex items-center justify-center hover-scale"
+            style={{ backgroundColor: theme.accent, boxShadow: `0 4px 24px ${theme.accent}66` }}
+          >
+            +
+          </button>
+        </div>
+      )}
+
       <div className="fixed bottom-0 left-0 right-0 transition-colors duration-300"
         style={{
           backgroundColor: darkMode ? 'rgba(17,17,17,0.94)' : 'rgba(255,255,255,0.94)',
@@ -5472,6 +5312,7 @@ export default function BudgetSimulator() {
             { id: 'assets', icon: <Droplets size={20} />, label: '資産' },
             { id: 'calendar', icon: <Calendar size={20} />, label: '履歴' },
             { id: 'simulation', icon: <TrendingUp size={20} />, label: 'シミュ' },
+            { id: 'settings', icon: <Settings size={20} />, label: '設定' },
           ].map(tab => (
             <button
               key={tab.id}
