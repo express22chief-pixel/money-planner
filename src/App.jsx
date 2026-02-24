@@ -271,6 +271,8 @@ export default function BudgetSimulator() {
   const [showCFList, setShowCFList] = useState(false);
   const [showAddTransaction, setShowAddTransaction] = useState(false);
   const [recentTxnLimit, setRecentTxnLimit] = useState(5);
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyCategory, setHistoryCategory] = useState('all');
   const [settingsExpanded, setSettingsExpanded] = useState({ appearance: true, profile: true, budget: false, investment: false, category: false, creditcard: false, data: false }); // FABからの取引入力モーダル
   const [expandedCreditGroups, setExpandedCreditGroups] = useState({});
   const [summaryMonthOffset, setSummaryMonthOffset] = useState(0); // 0=今月, -1=先月...
@@ -2017,15 +2019,16 @@ export default function BudgetSimulator() {
                         onClick={() => setShowCFList(!showCFList)}
                         className="flex items-center gap-2 flex-1 text-left"
                       >
-                        <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>予定CF</span>
+                        <span className={`text-sm font-semibold ${theme.text} uppercase tracking-wide`}>今月の支払い予定</span>
                         <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>{allItems.length}件</span>
                         <span className={`text-xs ${theme.textSecondary} ml-auto mr-2`} style={{ display: 'inline-block', transform: showCFList ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }}>▼</span>
                       </button>
                     </div>
                     <div className="flex items-center gap-3">
                       {remainingTotal > 0 && (
-                        <span className="text-xs tabular-nums" style={{ color: theme.red }}>
-                          残 <span className="font-bold">¥{remainingTotal.toLocaleString()}</span>
+                        <span className="text-xs tabular-nums flex items-center gap-1" style={{ color: theme.red }}>
+                          <span className={`text-[10px] ${theme.textSecondary}`}>未払い</span>
+                          <span className="font-bold">¥{remainingTotal.toLocaleString()}</span>
                         </span>
                       )}
                       <span className={`text-xs tabular-nums ml-auto font-black ${theme.text}`}>
@@ -2322,6 +2325,34 @@ export default function BudgetSimulator() {
                 </button>
               </div>
 
+              {/* 検索・フィルター */}
+              <div className="flex gap-2 mb-3">
+                <div className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                  <span className={`text-xs ${theme.textSecondary}`}>🔍</span>
+                  <input
+                    type="text"
+                    placeholder="キーワード検索..."
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    className={`flex-1 text-xs bg-transparent focus:outline-none ${theme.text}`}
+                  />
+                  {historySearch && (
+                    <button onClick={() => setHistorySearch('')} className={`text-xs ${theme.textSecondary}`}>✕</button>
+                  )}
+                </div>
+                <select
+                  value={historyCategory}
+                  onChange={e => setHistoryCategory(e.target.value)}
+                  className={`px-2 py-2 rounded-xl text-xs font-semibold focus:outline-none ${darkMode ? 'bg-neutral-800 border border-neutral-700 text-neutral-300' : 'bg-neutral-50 border border-neutral-200 text-neutral-700'}`}
+                  style={{ colorScheme: darkMode ? 'dark' : 'light' }}
+                >
+                  <option value="all">全カテゴリ</option>
+                  {[...expenseCategories, ...incomeCategories].filter((c,i,a)=>a.indexOf(c)===i).map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="mb-3">
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {['日', '月', '火', '水', '木', '金', '土'].map((day, i) => (
@@ -2410,6 +2441,64 @@ export default function BudgetSimulator() {
               </div>
             </div>
 
+            {/* フィルター適用時：検索結果リスト */}
+            {(historySearch || historyCategory !== 'all') && (() => {
+              const filtered = transactions.filter(t => {
+                const matchMonth = t.date.startsWith(selectedMonth);
+                const matchCat = historyCategory === 'all' || t.category === historyCategory;
+                const matchSearch = !historySearch || 
+                  t.category?.includes(historySearch) || 
+                  t.memo?.includes(historySearch) ||
+                  String(Math.abs(t.amount)).includes(historySearch);
+                return matchMonth && matchCat && matchSearch;
+              });
+              return (
+                <div className={`${theme.cardGlass} rounded-xl p-4`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className={`text-sm font-semibold ${theme.text}`}>
+                      検索結果
+                      <span className={`ml-2 text-xs font-normal ${theme.textSecondary}`}>{filtered.length}件</span>
+                    </h2>
+                    <button
+                      onClick={() => { setHistorySearch(''); setHistoryCategory('all'); }}
+                      className={`text-xs px-2 py-1 rounded-lg ${darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-500'}`}
+                    >クリア</button>
+                  </div>
+                  {filtered.length === 0 ? (
+                    <p className={`text-sm text-center py-4 ${theme.textSecondary}`}>該当する取引がありません</p>
+                  ) : (
+                    <div className="space-y-1">
+                      {filtered.map(t => (
+                        <div key={t.id}
+                          onClick={() => setEditingTransaction(t)}
+                          className={`flex items-center gap-3 px-2 py-2.5 rounded-xl cursor-pointer transition-all ${darkMode ? 'hover:bg-neutral-700/40' : 'hover:bg-neutral-50'}`}
+                        >
+                          <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-sm ${
+                            t.type === 'income' ? (darkMode ? 'bg-green-500/15' : 'bg-green-50') :
+                            t.isSettlement ? (darkMode ? 'bg-orange-500/15' : 'bg-orange-50') :
+                            t.paymentMethod === 'credit' ? (darkMode ? 'bg-blue-500/15' : 'bg-blue-50') :
+                            (darkMode ? 'bg-neutral-800' : 'bg-neutral-100')
+                          }`}>
+                            {t.type === 'income' ? '💰' : t.isSettlement ? '💸' : t.paymentMethod === 'credit' ? '💳' : '💵'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-semibold ${theme.text} truncate`}>{t.category}</p>
+                            <p className={`text-xs ${theme.textSecondary} truncate`}>{t.memo || t.date}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-bold tabular-nums" style={{ color: t.amount >= 0 ? theme.green : (t.isSettlement ? theme.orange : theme.red) }}>
+                              {t.amount >= 0 ? '+' : ''}¥{Math.abs(t.amount).toLocaleString()}
+                            </p>
+                            <p className={`text-[10px] ${theme.textSecondary}`}>{t.date.slice(5)}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* 未締め月の締めるボタン（履歴タブ） */}
             {!monthlyHistory[selectedMonth] && calculateMonthlyBalance(selectedMonth).cfBalance !== 0 && selectedMonth < currentMonth && (
               <button
@@ -2487,7 +2576,7 @@ export default function BudgetSimulator() {
                   { label: '現預金', value: isNaN(assetData.savings)?0:assetData.savings, color: '#3b82f6' },
                   { label: '投資', value: isNaN(assetData.investments)?0:assetData.investments, color: '#a855f7' },
                   { label: 'NISA', value: isNaN(assetData.nisa)?0:(assetData.nisa||0), color: theme.green },
-                  { label: '待機', value: isNaN(assetData.dryPowder)?0:(assetData.dryPowder||0), color: theme.accent },
+                  { label: '投資待機', value: isNaN(assetData.dryPowder)?0:(assetData.dryPowder||0), color: theme.accent },
                 ].map(({ label, value, color }) => (
                   <div key={label}>
                     <p className={`text-[10px] ${theme.textSecondary} mb-0.5`}>{label}</p>
@@ -3227,10 +3316,13 @@ export default function BudgetSimulator() {
               </div>
 
               <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2 flex items-center gap-1`}>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-1 flex items-center gap-1`}>
                   <Droplets size={14} style={{ color: theme.accent }} />
                   投資待機資金
                 </label>
+                <p className={`text-[11px] ${theme.textSecondary} mb-2 leading-relaxed`}>
+                  💡 投資タイミングを待っている現金。株安・暴落時などに素早く投資に回すために別管理する資金です。
+                </p>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -4730,10 +4822,13 @@ export default function BudgetSimulator() {
               </div>
 
               <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2 flex items-center gap-1`}>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-1 flex items-center gap-1`}>
                   <Droplets size={14} style={{ color: theme.accent }} />
                   投資待機資金
                 </label>
+                <p className={`text-[11px] ${theme.textSecondary} mb-2 leading-relaxed`}>
+                  💡 投資タイミングを待っている現金。株安・暴落時などに素早く投資に回すために別管理する資金です。
+                </p>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -5142,169 +5237,203 @@ export default function BudgetSimulator() {
       )}
 
       {editingTransaction && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
-            <h2 className={`text-xl font-bold ${theme.text} mb-4`}>
-              {editingTransaction.isSettlement ? 'クレジット引き落とし予定' : '取引を編集'}
-            </h2>
+        <div className="fixed inset-0 bg-black/60 flex items-end justify-center z-50 animate-fadeIn" onClick={() => setEditingTransaction(null)}>
+          <div className={`${theme.cardGlass} rounded-t-3xl w-full max-w-md max-h-[92vh] overflow-y-auto animate-slideUp`} onClick={e => e.stopPropagation()}>
+            {/* ヘッダー */}
+            <div className={`sticky top-0 flex items-center justify-between px-5 pt-4 pb-3 ${darkMode ? 'bg-neutral-900/95' : 'bg-white/95'} backdrop-blur-md border-b ${theme.border}`}>
+              <h2 className={`text-lg font-bold ${theme.text}`}>
+                {editingTransaction.isSettlement ? '💳 クレジット引き落とし' : '取引を編集'}
+              </h2>
+              <button onClick={() => setEditingTransaction(null)} className={`w-8 h-8 flex items-center justify-center rounded-full ${darkMode ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-100 text-neutral-600'} text-sm font-bold`}>✕</button>
+            </div>
 
-            {/* 引き落とし予約は読み取り専用 */}
-            {editingTransaction.isSettlement ? (
-              <div className="space-y-3">
-                <div className={`rounded-xl p-4 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
-                  <p className={`text-xs font-bold ${theme.textSecondary} mb-3 uppercase tracking-wide`}>引き落とし情報</p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between"><span className={theme.textSecondary}>カード</span><span className={`font-medium ${theme.text}`}>{creditCards.find(c=>c.id===editingTransaction.cardId)?.name || 'カード'}</span></div>
-                    <div className="flex justify-between"><span className={theme.textSecondary}>引き落とし日</span><span className={`font-medium ${theme.text}`}>{editingTransaction.date}</span></div>
-                    <div className="flex justify-between"><span className={theme.textSecondary}>金額</span><span className="font-bold tabular-nums" style={{color:theme.red}}>¥{Math.abs(editingTransaction.amount).toLocaleString()}</span></div>
-                    <div className="flex justify-between"><span className={theme.textSecondary}>状態</span><span className={`text-xs font-bold px-2 py-0.5 rounded-full ${editingTransaction.settled ? 'bg-green-500/20 text-green-500' : 'bg-orange-500/20 text-orange-400'}`}>{editingTransaction.settled ? '引き落とし済み' : '予定'}</span></div>
-                  </div>
-                </div>
-                <p className={`text-xs text-center ${theme.textSecondary}`}>引き落とし予約は元の取引から自動生成されます。金額を変更したい場合は元の取引を編集してください。</p>
-                <button onClick={() => setEditingTransaction(null)} className={`w-full py-3 rounded-xl font-bold ${darkMode ? 'bg-neutral-800 text-white' : 'border-2 border-neutral-300 text-neutral-700'}`}>閉じる</button>
-              </div>
-            ) : (<>
-            <div className="space-y-4">
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setEditingTransaction({ ...editingTransaction, type: 'expense', amount: -Math.abs(editingTransaction.amount) })}
-                  className={`flex-1 py-2 rounded-lg font-bold ${
-                    editingTransaction.type === 'expense' 
-                      ? darkMode ? 'bg-red-600 text-white' : 'bg-red-500 text-white' 
-                      : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
-                  }`}
-                >
-                  支出
-                </button>
-                <button
-                  onClick={() => setEditingTransaction({ ...editingTransaction, type: 'income', amount: Math.abs(editingTransaction.amount) })}
-                  className={`flex-1 py-2 rounded-lg font-bold ${
-                    editingTransaction.type === 'income' 
-                      ? darkMode ? 'bg-green-600 text-white' : 'bg-green-500 text-white' 
-                      : darkMode ? 'bg-neutral-800 text-neutral-400' : 'bg-neutral-100 text-neutral-600'
-                  }`}
-                >
-                  収入
-                </button>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>金額</label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={Math.abs(editingTransaction.amount)}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9]/g, '');
-                    const amount = editingTransaction.type === 'expense' ? -Math.abs(Number(value)) : Math.abs(Number(value));
-                    setEditingTransaction({ ...editingTransaction, amount });
-                  }}
-                  className={`w-full px-4 py-2 rounded-lg tabular-nums ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
-                  }`}
-                />
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>カテゴリ</label>
-                <select
-                  value={editingTransaction.category}
-                  onChange={(e) => setEditingTransaction({ ...editingTransaction, category: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-lg ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
-                  }`}
-                >
-                  {(editingTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>日付</label>
-                <input
-                  type="date"
-                  value={editingTransaction.date}
-                  onChange={(e) => setEditingTransaction({ ...editingTransaction, date: e.target.value })}
-                  className={`w-full px-2 py-2 rounded-lg text-sm ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'
-                  }`}
-                  style={{ colorScheme: darkMode ? 'dark' : 'light' }}
-                />
-              </div>
-
-              <div>
-                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>メモ</label>
-                <input
-                  type="text"
-                  placeholder="メモ（任意）"
-                  value={editingTransaction.memo || ''}
-                  onChange={(e) => setEditingTransaction({ ...editingTransaction, memo: e.target.value })}
-                  className={`w-full px-4 py-2 rounded-lg text-sm ${
-                    darkMode ? 'bg-neutral-800 text-white border border-neutral-600 placeholder-neutral-500' : 'bg-white border border-neutral-200 placeholder-neutral-400'
-                  } focus:outline-none`}
-                />
-              </div>
-
-              {editingTransaction?.isSplit && (
-                <div className={`rounded-lg px-4 py-3 ${darkMode ? 'bg-neutral-800' : 'bg-blue-50'}`}>
-                  <p className={`text-xs font-bold mb-2 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>👥 立替払いの内訳</p>
-                  <div className="space-y-1.5">
-                    {(editingTransaction.splitMembers || []).map((m, i) => (
-                      <div key={i} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-sm font-medium ${theme.text}`}>{m.name}</span>
-                          {m.settled && <span className="text-xs text-green-500 font-bold">✅精算済</span>}
-                          {!m.settled && <span className={`text-xs ${theme.textSecondary}`}>⏳未回収</span>}
+            <div className="px-4 pb-8 pt-4">
+              {/* 引き落とし予約：読み取り専用 */}
+              {editingTransaction.isSettlement ? (
+                <div className="space-y-3">
+                  <div className={`rounded-2xl p-4 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
+                    <p className={`text-xs font-bold ${theme.textSecondary} mb-3 uppercase tracking-wide`}>引き落とし情報</p>
+                    <div className="space-y-2.5">
+                      {[
+                        { label: 'カード', value: creditCards.find(c=>c.id===editingTransaction.cardId)?.name || 'カード' },
+                        { label: '引き落とし日', value: editingTransaction.date },
+                      ].map(({label, value}) => (
+                        <div key={label} className="flex justify-between items-center">
+                          <span className={`text-sm ${theme.textSecondary}`}>{label}</span>
+                          <span className={`text-sm font-semibold ${theme.text}`}>{value}</span>
                         </div>
-                        <span className="text-sm font-bold tabular-nums" style={{ color: m.settled ? theme.green : theme.accent }}>
-                          ¥{Number(m.amount).toLocaleString()}
+                      ))}
+                      <div className="flex justify-between items-center pt-2 border-t" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
+                        <span className={`text-sm ${theme.textSecondary}`}>金額</span>
+                        <span className="text-xl font-black tabular-nums" style={{color:theme.red}}>¥{Math.abs(editingTransaction.amount).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className={`text-sm ${theme.textSecondary}`}>状態</span>
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${editingTransaction.settled ? 'bg-green-500/20 text-green-500' : 'bg-orange-500/20 text-orange-400'}`}>
+                          {editingTransaction.settled ? '✓ 引き落とし済み' : '⏳ 予定'}
                         </span>
                       </div>
-                    ))}
-                    <div className={`flex justify-between pt-1.5 border-t ${theme.border}`}>
-                      <span className={`text-xs font-semibold ${theme.text}`}>立替合計</span>
-                      <span className="text-sm font-bold tabular-nums" style={{ color: theme.accent }}>
-                        ¥{(editingTransaction.splitAmount || 0).toLocaleString()}
-                      </span>
                     </div>
                   </div>
-                  {!editingTransaction?.splitSettled && (
-                    <p className={`text-xs mt-2 ${theme.textSecondary}`}>⏳ ホームの「立替待ち」リストから人ごとに精算できます</p>
+                  <p className={`text-xs text-center leading-relaxed ${theme.textSecondary}`}>
+                    引き落とし予約は元の取引から自動生成されます。<br/>金額を変更したい場合は元の取引を編集してください。
+                  </p>
+                  <button onClick={() => setEditingTransaction(null)} className={`w-full py-3 rounded-2xl font-bold ${darkMode ? 'bg-neutral-800 text-white' : 'bg-neutral-100 text-neutral-700'}`}>閉じる</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {/* 支出/収入 切替 */}
+                  <div className="flex gap-2">
+                    {[{type:'expense',label:'支出',color:theme.red},{type:'income',label:'収入',color:theme.green}].map(({type,label,color}) => (
+                      <button key={type}
+                        onClick={() => setEditingTransaction({...editingTransaction, type, amount: type==='expense' ? -Math.abs(editingTransaction.amount) : Math.abs(editingTransaction.amount)})}
+                        className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all"
+                        style={{
+                          backgroundColor: editingTransaction.type === type ? color : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                          color: editingTransaction.type === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
+                        }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* 金額（大きく） */}
+                  <div className={`rounded-2xl p-4 ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
+                    <p className={`text-xs font-medium ${theme.textSecondary} mb-2`}>金額</p>
+                    <div className="flex items-baseline gap-1">
+                      <span className={`text-2xl font-black`} style={{ color: editingTransaction.type === 'income' ? theme.green : theme.red }}>¥</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={Math.abs(editingTransaction.amount) || ''}
+                        onChange={e => {
+                          const v = e.target.value.replace(/[^0-9]/g, '');
+                          setEditingTransaction({...editingTransaction, amount: editingTransaction.type==='expense' ? -Number(v) : Number(v)});
+                        }}
+                        placeholder="0"
+                        className={`flex-1 text-3xl font-black tabular-nums bg-transparent focus:outline-none`}
+                        style={{ color: editingTransaction.type === 'income' ? theme.green : theme.red }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* カテゴリ */}
+                  <div>
+                    <p className={`text-xs font-medium ${theme.textSecondary} mb-2`}>カテゴリ</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(editingTransaction.type === 'expense' ? expenseCategories : incomeCategories).map(cat => (
+                        <button key={cat}
+                          onClick={() => setEditingTransaction({...editingTransaction, category: cat})}
+                          className="px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
+                          style={{
+                            backgroundColor: editingTransaction.category === cat ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                            color: editingTransaction.category === cat ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
+                          }}>
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* 支払方法（支出のみ） */}
+                  {editingTransaction.type === 'expense' && !editingTransaction.isRecurring && (
+                    <div>
+                      <p className={`text-xs font-medium ${theme.textSecondary} mb-2`}>支払方法</p>
+                      <div className="flex gap-2">
+                        {[{key:'credit',label:'💳 クレジット'},{key:'cash',label:'💵 現金'}].map(({key,label}) => (
+                          <button key={key}
+                            onClick={() => setEditingTransaction({...editingTransaction, paymentMethod: key, cardId: key==='credit' ? (editingTransaction.cardId || creditCards[0]?.id) : null})}
+                            className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
+                            style={{
+                              backgroundColor: editingTransaction.paymentMethod === key ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                              color: editingTransaction.paymentMethod === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
+                            }}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {editingTransaction.paymentMethod === 'credit' && creditCards.length > 1 && (
+                        <select
+                          value={editingTransaction.cardId || ''}
+                          onChange={e => setEditingTransaction({...editingTransaction, cardId: e.target.value})}
+                          className={`w-full mt-2 px-3 py-2 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                          style={{ colorScheme: darkMode ? 'dark' : 'light' }}
+                        >
+                          {creditCards.map(card => <option key={card.id} value={card.id}>{card.name}</option>)}
+                        </select>
+                      )}
+                    </div>
                   )}
 
+                  {/* 日付 */}
+                  <div>
+                    <p className={`text-xs font-medium ${theme.textSecondary} mb-2`}>日付</p>
+                    <input
+                      type="date"
+                      value={editingTransaction.date}
+                      onChange={e => setEditingTransaction({...editingTransaction, date: e.target.value})}
+                      className={`w-full px-4 py-3 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                      style={{ colorScheme: darkMode ? 'dark' : 'light' }}
+                    />
+                  </div>
+
+                  {/* メモ */}
+                  <div>
+                    <p className={`text-xs font-medium ${theme.textSecondary} mb-2`}>メモ（任意）</p>
+                    <input
+                      type="text"
+                      placeholder="メモを入力..."
+                      value={editingTransaction.memo || ''}
+                      onChange={e => setEditingTransaction({...editingTransaction, memo: e.target.value})}
+                      className={`w-full px-4 py-3 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-700 placeholder-neutral-600' : 'bg-white border border-neutral-200 placeholder-neutral-400'} focus:outline-none`}
+                    />
+                  </div>
+
+                  {/* 立替内訳（読み取り） */}
+                  {editingTransaction?.isSplit && (
+                    <div className={`rounded-2xl p-4 ${darkMode ? 'bg-blue-500/10 border border-blue-500/20' : 'bg-blue-50 border border-blue-100'}`}>
+                      <p className={`text-xs font-bold mb-3 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>👥 立替払いの内訳</p>
+                      <div className="space-y-2">
+                        {(editingTransaction.splitMembers || []).map((m, i) => (
+                          <div key={i} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-sm font-medium ${theme.text}`}>{m.name}</span>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${m.settled ? 'bg-green-500/20 text-green-500' : 'bg-orange-500/20 text-orange-400'}`}>
+                                {m.settled ? '精算済' : '未回収'}
+                              </span>
+                            </div>
+                            <span className="text-sm font-bold tabular-nums" style={{ color: m.settled ? theme.green : theme.accent }}>
+                              ¥{Number(m.amount).toLocaleString()}
+                            </span>
+                          </div>
+                        ))}
+                        <div className={`flex justify-between pt-2 border-t ${theme.border}`}>
+                          <span className={`text-xs font-semibold ${theme.text}`}>立替合計</span>
+                          <span className="text-sm font-bold tabular-nums" style={{ color: theme.accent }}>¥{(editingTransaction.splitAmount||0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                      {!editingTransaction?.splitSettled && (
+                        <p className={`text-xs mt-2 ${theme.textSecondary}`}>⏳ ホームの「立替待ち」から人ごとに精算できます</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* アクションボタン */}
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      onClick={() => { deleteTransaction(editingTransaction.id); setEditingTransaction(null); }}
+                      className="w-12 h-12 flex items-center justify-center rounded-2xl font-bold text-white shrink-0"
+                      style={{ backgroundColor: theme.red }}
+                    >🗑️</button>
+                    <button
+                      onClick={() => updateTransaction(editingTransaction)}
+                      className="flex-1 py-3 rounded-2xl font-bold text-white text-sm"
+                      style={{ backgroundColor: theme.accent }}
+                    >変更を保存</button>
+                  </div>
                 </div>
               )}
             </div>
-
-            <div className="grid grid-cols-4 gap-2 mt-6">
-              <button
-                onClick={() => {
-                  deleteTransaction(editingTransaction.id);
-                  setEditingTransaction(null);
-                }}
-                className="px-4 py-3 rounded-xl font-bold text-white"
-                style={{ backgroundColor: theme.red }}
-              >
-                🗑️
-              </button>
-              <button
-                onClick={() => setEditingTransaction(null)}
-                className={`px-4 py-3 rounded-xl font-bold ${
-                  darkMode ? 'bg-neutral-800 text-white' : 'border-2 border-neutral-300 text-neutral-700'
-                }`}
-              >
-                ✕
-              </button>
-              <button
-                onClick={() => updateTransaction(editingTransaction)}
-                className="col-span-2 px-4 py-3 rounded-xl font-bold text-white"
-                style={{ backgroundColor: theme.accent }}
-              >
-                保存
-              </button>
-            </div>
-            </>)} {/* end of else (non-settlement) */}
           </div>
         </div>
       )}
