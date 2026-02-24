@@ -2326,8 +2326,8 @@ export default function BudgetSimulator() {
               </div>
 
               {/* 検索・フィルター */}
-              <div className="flex gap-2 mb-3 overflow-hidden">
-                <div className={`flex-1 flex items-center gap-2 px-2.5 py-2 rounded-xl ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+              <div className="flex flex-col gap-2 mb-3">
+                <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
                   <span className={`text-xs ${theme.textSecondary}`}>🔍</span>
                   <input
                     type="text"
@@ -2343,7 +2343,7 @@ export default function BudgetSimulator() {
                 <select
                   value={historyCategory}
                   onChange={e => setHistoryCategory(e.target.value)}
-                  className={`w-[100px] shrink-0 px-2 py-2 rounded-xl text-xs font-semibold focus:outline-none ${darkMode ? 'bg-neutral-800 border border-neutral-700 text-neutral-300' : 'bg-neutral-50 border border-neutral-200 text-neutral-700'}`}
+                  className={`w-full px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none ${darkMode ? 'bg-neutral-800 border border-neutral-700 text-neutral-300' : 'bg-neutral-50 border border-neutral-200 text-neutral-700'}`}
                   style={{ colorScheme: darkMode ? 'dark' : 'light' }}
                 >
                   <option value="all">全カテゴリ</option>
@@ -2352,6 +2352,7 @@ export default function BudgetSimulator() {
                   ))}
                 </select>
               </div>
+
 
               <div className="mb-3">
                 <div className="grid grid-cols-7 gap-1 mb-2">
