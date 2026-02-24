@@ -243,7 +243,9 @@ export default function BudgetSimulator() {
   const [showSplitList, setShowSplitList] = useState(false);
   const [showRecurringList, setShowRecurringList] = useState(false);
   const [showCFList, setShowCFList] = useState(false);
-  const [showAddTransaction, setShowAddTransaction] = useState(false); // FABからの取引入力モーダル
+  const [showAddTransaction, setShowAddTransaction] = useState(false);
+  const [recentTxnLimit, setRecentTxnLimit] = useState(7);
+  const [settingsExpanded, setSettingsExpanded] = useState({ appearance: true, profile: true, budget: false, investment: false, category: false, creditcard: false, data: false }); // FABからの取引入力モーダル
   const [expandedCreditGroups, setExpandedCreditGroups] = useState({});
   const [summaryMonthOffset, setSummaryMonthOffset] = useState(0); // 0=今月, -1=先月...
 
@@ -2168,6 +2170,16 @@ export default function BudgetSimulator() {
                                   ? { ...s, settled: true, settledDate: new Date().toISOString().slice(0, 10) }
                                   : s
                               ));
+                              // editingTransactionを同期（精算後の表示崩れ防止）
+                              setEditingTransaction(prev => {
+                                if (!prev) return prev;
+                                const updatedMembers = (prev.splitMembers || []).map(m =>
+                                  m.name === sp.person && !m.settled
+                                    ? { ...m, settled: true, settledDate: new Date().toISOString().slice(0, 10) }
+                                    : m
+                                );
+                                return { ...prev, splitMembers: updatedMembers, splitSettled: updatedMembers.every(m => m.settled) };
+                              });
                             }}
                             className="shrink-0 px-4 py-2 rounded-xl text-sm font-bold text-white hover-scale transition-all"
                             style={{ backgroundColor: theme.green }}
@@ -2198,7 +2210,7 @@ export default function BudgetSimulator() {
                 <p className={`text-sm text-center py-8 ${theme.textSecondary}`}>まだ取引がありません</p>
               ) : (
                 <div className="space-y-1">
-                  {transactions.slice(0, 10).map((t, idx) => (
+                  {transactions.slice(0, recentTxnLimit).map((t, idx) => (
                     <div key={t.id} onClick={() => setEditingTransaction(t)}
                       className={`flex items-center gap-3 px-1 py-2.5 rounded-xl cursor-pointer transition-all duration-200 animate-fadeIn ${darkMode ? 'hover:bg-neutral-700/30' : 'hover:bg-neutral-50'}`}
                       style={{ animationDelay: `${idx * 0.03}s` }}>
@@ -2901,30 +2913,48 @@ export default function BudgetSimulator() {
           </div>
         )}
 
-        {activeTab === 'settings' && (
-          <div className="space-y-3 animate-fadeIn pb-6">
+        {activeTab === 'settings' && (() => {
+          const AccSection = ({ id, title, icon, children, defaultOpen }) => {
+            const isOpen = settingsExpanded[id] !== undefined ? settingsExpanded[id] : !!defaultOpen;
+            return (
+              <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
+                <button
+                  onClick={() => setSettingsExpanded(prev => ({ ...prev, [id]: !isOpen }))}
+                  className={`w-full flex items-center justify-between px-4 py-3.5 transition-colors ${isOpen ? '' : ''}`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-base">{icon}</span>
+                    <span className={`text-sm font-semibold ${theme.text}`}>{title}</span>
+                  </div>
+                  <span className={`text-xs transition-transform duration-200 ${theme.textSecondary}`}
+                    style={{ display: 'inline-block', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                </button>
+                {isOpen && (
+                  <div className={`px-4 pb-4 border-t ${theme.border} animate-fadeIn`}>
+                    {children}
+                  </div>
+                )}
+              </div>
+            );
+          };
+          return (
+          <div className="space-y-2 animate-fadeIn pb-6">
 
-            {/* 外観 */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>外観</p>
-              <div className="flex items-center justify-between">
+            <AccSection id="appearance" icon="🌙" title="外観" defaultOpen={true}>
+              <div className="flex items-center justify-between pt-3">
                 <div>
                   <p className={`text-sm font-semibold ${theme.text}`}>ダークモード</p>
                   <p className={`text-xs ${theme.textSecondary} mt-0.5`}>{darkMode ? 'ON' : 'OFF'}</p>
                 </div>
-                <button
-                  onClick={() => setDarkMode(!darkMode)}
-                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${darkMode ? 'bg-blue-500' : 'bg-neutral-300'}`}
-                >
+                <button onClick={() => setDarkMode(!darkMode)}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${darkMode ? 'bg-blue-500' : 'bg-neutral-300'}`}>
                   <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${darkMode ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>
               </div>
-            </div>
+            </AccSection>
 
-            {/* プロフィール */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>プロフィール</p>
-              <div className="grid grid-cols-2 gap-3">
+            <AccSection id="profile" icon="👤" title="プロフィール" defaultOpen={true}>
+              <div className="grid grid-cols-2 gap-3 pt-3">
                 <div>
                   <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>名前</label>
                   <input type="text" value={userInfo?.name || ''} onChange={(e) => setUserInfo({ ...userInfo, name: e.target.value })}
@@ -2941,23 +2971,18 @@ export default function BudgetSimulator() {
                   💡 年齢を設定すると資産タブで同世代比較が使えます
                 </p>
               )}
-            </div>
+            </AccSection>
 
-            {/* 月間予算設定 */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>月間予算</p>
-              <div className="space-y-3">
+            <AccSection id="budget" icon="📊" title="月間予算">
+              <div className="space-y-3 pt-3">
                 <div>
                   <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>月間収入予定</label>
-                  <input
-                    type="text" inputMode="numeric"
-                    value={monthlyBudget.income}
+                  <input type="text" inputMode="numeric" value={monthlyBudget.income}
                     onChange={(e) => setMonthlyBudget({ ...monthlyBudget, income: Number(e.target.value.replace(/[^0-9]/g, '')) })}
-                    className={`w-full px-3 py-2.5 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
-                  />
+                    className={`w-full px-3 py-2.5 rounded-xl text-sm tabular-nums ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
                   <p className={`text-xs ${theme.textSecondary} mt-1 tabular-nums`}>¥{monthlyBudget.income.toLocaleString()}</p>
                 </div>
-                <div className={`border-t pt-3`} style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
+                <div className="border-t pt-3" style={{ borderColor: darkMode ? '#2C2C2E' : '#e5e7eb' }}>
                   <p className={`text-xs font-semibold ${theme.text} mb-2`}>カテゴリ別予算</p>
                   <div className="space-y-2">
                     {Object.entries(monthlyBudget.expenses).map(([category, amount]) => (
@@ -2966,7 +2991,7 @@ export default function BudgetSimulator() {
                           <label className={`text-xs font-medium ${theme.textSecondary}`}>{category}</label>
                           <span className={`text-xs font-bold tabular-nums ${theme.text}`}>¥{amount.toLocaleString()}</span>
                         </div>
-                        <input type="range" min="0" max="200000" step="5000" value={amount}
+                        <input type="range" min="0" max="300000" step="5000" value={amount}
                           onChange={(e) => setMonthlyBudget({ ...monthlyBudget, expenses: { ...monthlyBudget.expenses, [category]: Number(e.target.value) } })}
                           className="w-full" style={{ accentColor: theme.accent }} />
                       </div>
@@ -2980,40 +3005,36 @@ export default function BudgetSimulator() {
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className={theme.textSecondary}>予算収支</span>
-                    <span className={`font-bold tabular-nums`} style={{ color: monthlyBudget.income - Object.values(monthlyBudget.expenses).reduce((a,b)=>a+b,0) >= 0 ? theme.green : theme.red }}>
+                    <span className="font-bold tabular-nums" style={{ color: monthlyBudget.income - Object.values(monthlyBudget.expenses).reduce((a,b)=>a+b,0) >= 0 ? theme.green : theme.red }}>
                       ¥{(monthlyBudget.income - Object.values(monthlyBudget.expenses).reduce((a,b)=>a+b,0)).toLocaleString()}
                     </span>
                   </div>
                 </div>
               </div>
-            </div>
+            </AccSection>
 
-            {/* 積立・投資目標 */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>積立・投資目標</p>
-              <div className="space-y-4">
+            <AccSection id="investment" icon="📈" title="積立・投資目標">
+              <div className="space-y-4 pt-3">
                 {[
-                  { key: 'targetAmount', label: '目標金額', min: 1000000, max: 100000000, step: 1000000, fmt: v => `¥${(v/10000).toFixed(0)}万` },
-                  { key: 'years', label: '運用期間', min: 1, max: 30, step: 1, fmt: v => `${v}年` },
-                  { key: 'monthlySavings', label: '月々の貯金', min: 0, max: 200000, step: 10000, fmt: v => `¥${v.toLocaleString()}` },
-                  { key: 'monthlyInvestment', label: '月々の積立投資', min: 0, max: 200000, step: 10000, fmt: v => `¥${v.toLocaleString()}` },
-                  { key: 'returnRate', label: '想定利回り', min: 1, max: 10, step: 0.5, fmt: v => `${v}%` },
+                  { key: 'targetAmount', label: '目標金額', min: 1000000, max: 500000000, step: 1000000, fmt: v => v >= 100000000 ? `¥${(v/100000000).toFixed(1)}億` : `¥${(v/10000).toFixed(0)}万` },
+                  { key: 'years', label: '運用期間', min: 1, max: 50, step: 1, fmt: v => `${v}年` },
+                  { key: 'monthlySavings', label: '月々の貯金', min: 0, max: 2000000, step: 10000, fmt: v => `¥${v.toLocaleString()}` },
+                  { key: 'monthlyInvestment', label: '月々の積立投資', min: 0, max: 2000000, step: 10000, fmt: v => `¥${v.toLocaleString()}` },
+                  { key: 'returnRate', label: '想定利回り', min: 0, max: 15, step: 0.5, fmt: v => `${v}%` },
                   { key: 'savingsInterestRate', label: '預金金利', min: 0, max: 5, step: 0.1, fmt: v => `${v}%` },
                 ].map(({ key, label, min, max, step, fmt }) => (
                   <div key={key}>
                     <div className="flex justify-between items-center mb-1">
                       <label className={`text-xs font-medium ${theme.textSecondary}`}>{label}</label>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text" inputMode="decimal"
-                          value={simulationSettings[key]}
-                          onChange={(e) => {
-                            const v = parseFloat(e.target.value.replace(/[^0-9.]/g, ''));
-                            if (!isNaN(v)) setSimulationSettings({ ...simulationSettings, [key]: Math.min(max, Math.max(min, v)) });
-                          }}
-                          className={`w-24 px-2 py-1 rounded-lg text-xs font-bold tabular-nums text-right ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
-                        />
-                      </div>
+                      <input
+                        type="text" inputMode="decimal"
+                        value={simulationSettings[key]}
+                        onChange={(e) => {
+                          const v = parseFloat(e.target.value.replace(/[^0-9.]/g, ''));
+                          if (!isNaN(v)) setSimulationSettings({ ...simulationSettings, [key]: Math.min(max, Math.max(min, v)) });
+                        }}
+                        className={`w-32 px-2.5 py-1.5 rounded-lg text-sm font-bold tabular-nums text-right ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}
+                      />
                     </div>
                     <input type="range" min={min} max={max} step={step} value={simulationSettings[key]}
                       onChange={(e) => setSimulationSettings({ ...simulationSettings, [key]: Number(e.target.value) })}
@@ -3034,79 +3055,76 @@ export default function BudgetSimulator() {
                   </div>
                 )}
               </div>
-            </div>
+            </AccSection>
 
-            {/* カテゴリ管理 */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>カテゴリ管理</p>
-              <div className="flex gap-2 mb-3">
-                {['expense', 'income'].map(type => (
-                  <button key={type} onClick={() => setNewCategoryType(type)}
-                    className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
-                    style={{ backgroundColor: newCategoryType === type ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'), color: newCategoryType === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373') }}>
-                    {type === 'expense' ? '支出カテゴリ' : '収入カテゴリ'}
-                  </button>
-                ))}
-              </div>
-              <div className="flex gap-2 mb-3">
-                <input type="text" placeholder="新しいカテゴリ名" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)}
-                  className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
-                <button onClick={() => {
-                    if (!newCategoryName.trim()) return;
-                    if (newCategoryType === 'expense') setCustomCategories(prev => ({ ...prev, expense: [...prev.expense, newCategoryName.trim()] }));
-                    else setCustomCategories(prev => ({ ...prev, income: [...prev.income, newCategoryName.trim()] }));
-                    setNewCategoryName('');
-                  }}
-                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white"
-                  style={{ backgroundColor: theme.accent }}>追加</button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(newCategoryType === 'expense' ? expenseCategories : incomeCategories).map(cat => (
-                  <span key={cat} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-100 text-neutral-700'}`}>
-                    {cat}
-                    {(newCategoryType === 'expense' ? customCategories.expense : customCategories.income).includes(cat) && (
-                      <button onClick={() => {
-                          if (newCategoryType === 'expense') setCustomCategories(prev => ({ ...prev, expense: prev.expense.filter(c => c !== cat) }));
-                          else setCustomCategories(prev => ({ ...prev, income: prev.income.filter(c => c !== cat) }));
-                        }}
-                        className="text-red-400 hover:text-red-600 ml-0.5 font-bold">×</button>
-                    )}
-                  </span>
-                ))}
-              </div>
-            </div>
-
-            {/* クレジットカード */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <div className="flex items-center justify-between mb-3">
-                <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest`}>クレジットカード</p>
-                <button onClick={() => { setEditingCard(null); setShowCardModal(true); }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: theme.accent }}>+ 追加</button>
-              </div>
-              {creditCards.length === 0 ? (
-                <p className={`text-xs text-center py-3 ${theme.textSecondary}`}>クレジットカードが登録されていません</p>
-              ) : (
-                <div className="space-y-2">
-                  {creditCards.map(card => (
-                    <div key={card.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
-                      <div>
-                        <p className={`text-sm font-semibold ${theme.text}`}>{card.name}</p>
-                        <p className={`text-xs ${theme.textSecondary}`}>締め日: {card.closingDay}日 / 支払い: 翌{card.paymentMonth === 2 ? '々' : ''}月{card.paymentDay}日</p>
-                      </div>
-                      <div className="flex gap-1">
-                        <button onClick={() => { setEditingCard(card); setShowCardModal(true); }} className="p-1.5 rounded-lg text-blue-500">✏️</button>
-                        <button onClick={() => { if(confirm('削除しますか？')) setCreditCards(prev => prev.filter(c => c.id !== card.id)); }} className="p-1.5 rounded-lg text-red-500">🗑️</button>
-                      </div>
-                    </div>
+            <AccSection id="category" icon="🏷️" title="カテゴリ管理">
+              <div className="pt-3">
+                <div className="flex gap-2 mb-3">
+                  {['expense', 'income'].map(type => (
+                    <button key={type} onClick={() => setNewCategoryType(type)}
+                      className="flex-1 py-2 rounded-xl text-xs font-semibold transition-all"
+                      style={{ backgroundColor: newCategoryType === type ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'), color: newCategoryType === type ? '#fff' : (darkMode ? '#d4d4d4' : '#737373') }}>
+                      {type === 'expense' ? '支出カテゴリ' : '収入カテゴリ'}
+                    </button>
                   ))}
                 </div>
-              )}
-            </div>
+                <div className="flex gap-2 mb-3">
+                  <input type="text" placeholder="新しいカテゴリ名" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)}
+                    className={`flex-1 px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`} />
+                  <button onClick={() => {
+                      if (!newCategoryName.trim()) return;
+                      if (newCategoryType === 'expense') setCustomCategories(prev => ({ ...prev, expense: [...prev.expense, newCategoryName.trim()] }));
+                      else setCustomCategories(prev => ({ ...prev, income: [...prev.income, newCategoryName.trim()] }));
+                      setNewCategoryName('');
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white" style={{ backgroundColor: theme.accent }}>追加</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {(newCategoryType === 'expense' ? expenseCategories : incomeCategories).map(cat => (
+                    <span key={cat} className={`flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${darkMode ? 'bg-neutral-800 text-neutral-300' : 'bg-neutral-100 text-neutral-700'}`}>
+                      {cat}
+                      {(newCategoryType === 'expense' ? customCategories.expense : customCategories.income).includes(cat) && (
+                        <button onClick={() => {
+                            if (newCategoryType === 'expense') setCustomCategories(prev => ({ ...prev, expense: prev.expense.filter(c => c !== cat) }));
+                            else setCustomCategories(prev => ({ ...prev, income: prev.income.filter(c => c !== cat) }));
+                          }}
+                          className="text-red-400 hover:text-red-600 ml-0.5 font-bold">×</button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </AccSection>
 
-            {/* データ管理 */}
-            <div className={`${theme.cardGlass} rounded-xl p-4`}>
-              <p className={`text-xs font-bold ${theme.textSecondary} uppercase tracking-widest mb-3`}>データ管理</p>
-              <div className="space-y-2">
+            <AccSection id="creditcard" icon="💳" title="クレジットカード">
+              <div className="pt-3">
+                <div className="flex justify-end mb-3">
+                  <button onClick={() => { setEditingCard(null); setShowCardModal(true); }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white" style={{ backgroundColor: theme.accent }}>+ 追加</button>
+                </div>
+                {creditCards.length === 0 ? (
+                  <p className={`text-xs text-center py-3 ${theme.textSecondary}`}>クレジットカードが登録されていません</p>
+                ) : (
+                  <div className="space-y-2">
+                    {creditCards.map(card => (
+                      <div key={card.id} className={`flex items-center justify-between p-3 rounded-xl ${darkMode ? 'bg-neutral-800' : 'bg-neutral-50'}`}>
+                        <div>
+                          <p className={`text-sm font-semibold ${theme.text}`}>{card.name}</p>
+                          <p className={`text-xs ${theme.textSecondary}`}>締め日: {card.closingDay}日 / 支払い: 翌{card.paymentMonth === 2 ? '々' : ''}月{card.paymentDay}日</p>
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => { setEditingCard(card); setShowCardModal(true); }} className="p-1.5 rounded-lg text-blue-500">✏️</button>
+                          <button onClick={() => { if(confirm('削除しますか？')) setCreditCards(prev => prev.filter(c => c.id !== card.id)); }} className="p-1.5 rounded-lg text-red-500">🗑️</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </AccSection>
+
+            <AccSection id="data" icon="💾" title="データ管理">
+              <div className="space-y-2 pt-3">
                 <button
                   onClick={() => {
                     const data = { transactions, recurringTransactions, creditCards, monthlyBudget, simulationSettings, userInfo, assetData };
@@ -3130,10 +3148,12 @@ export default function BudgetSimulator() {
                   🗑️ 全データをリセット
                 </button>
               </div>
-            </div>
+            </AccSection>
 
           </div>
-        )}
+          );
+        })()}
+
       </div>
       {showAssetEditModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 animate-fadeIn">
@@ -5215,7 +5235,7 @@ export default function BudgetSimulator() {
                 />
               </div>
 
-              {editingTransaction.isSplit && (
+              {editingTransaction?.isSplit && (
                 <div className={`rounded-lg px-4 py-3 ${darkMode ? 'bg-neutral-800' : 'bg-blue-50'}`}>
                   <p className={`text-xs font-bold mb-2 ${darkMode ? 'text-blue-400' : 'text-blue-600'}`}>👥 立替払いの内訳</p>
                   <div className="space-y-1.5">
@@ -5238,7 +5258,7 @@ export default function BudgetSimulator() {
                       </span>
                     </div>
                   </div>
-                  {!editingTransaction.splitSettled && (
+                  {!editingTransaction?.splitSettled && (
                     <p className={`text-xs mt-2 ${theme.textSecondary}`}>⏳ ホームの「立替待ち」リストから人ごとに精算できます</p>
                   )}
                   {transactions.length > recentTxnLimit && (
@@ -5290,10 +5310,11 @@ export default function BudgetSimulator() {
         <div className="fixed z-40" style={{ bottom: 'calc(env(safe-area-inset-bottom) + 72px)', right: '16px' }}>
           <button
             onClick={() => setShowAddTransaction(true)}
-            className="w-14 h-14 rounded-full text-white text-3xl font-light shadow-lg transition-all duration-200 flex items-center justify-center hover-scale"
-            style={{ backgroundColor: theme.accent, boxShadow: `0 4px 24px ${theme.accent}66` }}
+            className="h-12 px-5 rounded-full text-white text-sm font-bold shadow-lg transition-all duration-200 flex items-center gap-2 hover-scale"
+            style={{ backgroundColor: theme.accent, boxShadow: `0 4px 20px ${theme.accent}55` }}
           >
-            +
+            <span className="text-xl font-light leading-none">+</span>
+            <span>取引を追加</span>
           </button>
         </div>
       )}
