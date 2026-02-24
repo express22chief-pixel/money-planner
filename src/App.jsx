@@ -604,7 +604,39 @@ export default function BudgetSimulator() {
             investTarget: recurring.type === 'fund' ? 'fund' : 'investments'
           };
           
-          setTransactions(prev => [newTransaction, ...prev]);
+          const newTxns = [newTransaction];
+
+          // クレカ払いの場合、引き落とし予約（isSettlement）を追加生成
+          if (recurring.paymentMethod === 'credit') {
+            const cardId = recurring.cardId || (creditCards[0]?.id);
+            const card = creditCards.find(c => c.id === cardId) || creditCards[0];
+            if (card) {
+              const settlementDate = getSettlementDate(targetDate, cardId);
+              // 引き落とし予約の重複チェック
+              const settlementExists = transactions.some(t =>
+                t.isSettlement && t.parentTransactionId === newTransaction.id
+              );
+              if (!settlementExists && settlementDate) {
+                const toLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+                newTxns.push({
+                  id: Date.now() + Math.random() + 0.5,
+                  date: toLocalDate(settlementDate),
+                  category: `クレジット引き落とし（${card.name}）`,
+                  amount: -recurring.amount,
+                  type: 'expense',
+                  paymentMethod: 'cash',
+                  settled: settlementDate <= new Date(),
+                  isSettlement: true,
+                  parentTransactionId: newTransaction.id,
+                  cardId,
+                  isRecurring: true,
+                  recurringId: recurring.id,
+                });
+              }
+            }
+          }
+
+          setTransactions(prev => [...newTxns, ...prev]);
         }
       });
     });
@@ -4092,8 +4124,20 @@ export default function BudgetSimulator() {
                                   className={`w-full flex items-center justify-between px-4 py-2 transition-colors ${darkMode ? 'hover:bg-neutral-700/50' : 'hover:bg-neutral-100'}`}
                                 >
                                   <div className="flex-1 min-w-0 text-left pl-10">
-                                    <p className={`text-xs font-medium truncate ${theme.text}`}>{t.category && !t.category.startsWith('クレ') ? t.category : (t.memo || '—')}</p>
-                                    {t.memo && t.category && !t.category.startsWith('クレ') && <p className={`text-[10px] truncate ${theme.textSecondary}`}>{t.memo}</p>}
+                                    {(() => {
+                                      // parentTransactionIdで元取引を参照してカテゴリ・メモを表示
+                                      const parent = t.parentTransactionId
+                                        ? transactions.find(p => p.id === t.parentTransactionId)
+                                        : null;
+                                      const label = parent ? parent.category : (t.category && !t.category.startsWith('クレ') ? t.category : null);
+                                      const sub = parent ? parent.memo : t.memo;
+                                      return (
+                                        <>
+                                          <p className={`text-xs font-medium truncate ${theme.text}`}>{label || '（詳細なし）'}</p>
+                                          {sub && <p className={`text-[10px] truncate ${theme.textSecondary}`}>{sub}</p>}
+                                        </>
+                                      );
+                                    })()}
                                   </div>
                                   <p className="text-xs font-bold tabular-nums shrink-0 ml-3" style={{ color: darkMode ? '#888' : '#aaa' }}>
                                     ¥{Math.abs(t.amount).toLocaleString()}
