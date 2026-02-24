@@ -2343,7 +2343,7 @@ export default function BudgetSimulator() {
                 <select
                   value={historyCategory}
                   onChange={e => setHistoryCategory(e.target.value)}
-                  className={`px-2 py-2 rounded-xl text-xs font-semibold focus:outline-none max-w-［110px］ ${darkMode ? 'bg-neutral-800 border border-neutral-700 text-neutral-300' : 'bg-neutral-50 border border-neutral-200 text-neutral-700'}`}
+                  className={`px-2 py-2 rounded-xl text-xs font-semibold focus:outline-none max-w-［90px］ ${darkMode ? 'bg-neutral-800 border border-neutral-700 text-neutral-300' : 'bg-neutral-50 border border-neutral-200 text-neutral-700'}`}
                   style={{ colorScheme: darkMode ? 'dark' : 'light' }}
                 >
                   <option value="all">全カテゴリ</option>
