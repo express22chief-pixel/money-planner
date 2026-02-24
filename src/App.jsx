@@ -1765,68 +1765,63 @@ export default function BudgetSimulator() {
                   <div className="px-5 py-4" style={{
                     borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
                   }}>
-                    {/* 収入・支出の数字行 */}
-                    <div className="flex justify-between items-end mb-2.5">
-                      <div>
-                        <p className={`text-[9px] font-bold mb-0.5`} style={{ color: theme.green }}>↑ 収入</p>
-                        <p className="text-sm font-bold tabular-nums" style={{ color: theme.green }}>¥{inc.toLocaleString()}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className={`text-[9px] font-bold mb-0.5`} style={{ color: theme.red }}>↓ 支出</p>
-                        <p className="text-sm font-bold tabular-nums" style={{ color: theme.red }}>¥{exp.toLocaleString()}</p>
-                      </div>
-                    </div>
+                    {inc > 0 || exp > 0 ? (() => {
+                      const savingsPct = inc > 0 ? Math.max(0, Math.round((1 - exp / inc) * 100)) : 0;
+                      const expBarPct = inc > 0 ? Math.min((exp / inc) * 100, 100) : 100;
+                      return (
+                        <div>
+                          {/* 収入・支出 数字行 */}
+                          <div className="flex justify-between items-center mb-3">
+                            <div>
+                              <p className="text-[10px] font-medium mb-0.5" style={{ color: theme.green }}>↑ 収入</p>
+                              <p className="text-sm font-bold tabular-nums" style={{ color: theme.green }}>¥{inc.toLocaleString()}</p>
+                            </div>
+                            <div className="flex flex-col items-center">
+                              <div className="px-3 py-1 rounded-full text-[11px] font-black tabular-nums text-white"
+                                style={{ backgroundColor: isPositive ? theme.green : theme.red }}>
+                                {isPositive ? `▲ ¥${diff.toLocaleString()}` : `▼ ¥${Math.abs(diff).toLocaleString()}`}
+                              </div>
+                              <p className="text-[9px] mt-0.5 font-semibold" style={{ color: isPositive ? theme.green : theme.red }}>
+                                {isPositive ? `貯蓄率 ${savingsPct}%` : '赤字'}
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] font-medium mb-0.5" style={{ color: theme.red }}>↓ 支出</p>
+                              <p className="text-sm font-bold tabular-nums" style={{ color: theme.red }}>¥{exp.toLocaleString()}</p>
+                            </div>
+                          </div>
 
-                    {/* バー本体 */}
-                    {inc > 0 || exp > 0 ? (
-                      <div className="relative">
-                        {/* 背景トラック（収入100%） */}
-                        <div className="h-3 rounded-full overflow-visible relative" style={{
-                          backgroundColor: darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'
-                        }}>
-                          {/* 支出バー */}
-                          <div
-                            className="absolute left-0 top-0 h-full rounded-full transition-all duration-700"
-                            style={{
-                              width: inc > 0 ? `${Math.min(spendRatio * 100, 100)}%` : '100%',
-                              background: spendRatio > 0.9
-                                ? `linear-gradient(90deg, ${theme.green} 0%, ${theme.orange} 60%, ${theme.red} 100%)`
-                                : spendRatio > 0.6
-                                  ? `linear-gradient(90deg, ${theme.green} 0%, ${theme.orange} 100%)`
-                                  : theme.green,
-                              opacity: 0.85
-                            }}
-                          />
-                          {/* 赤字時：はみ出し表現 */}
-                          {!isPositive && (
-                            <div
-                              className="absolute top-[-2px] h-[calc(100%+4px)] rounded-full"
+                          {/* 1本の積み上げ比較バー */}
+                          <div className="relative h-3 rounded-full overflow-hidden" style={{ backgroundColor: darkMode ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }}>
+                            {/* 収入（緑）バー：常に左から100% */}
+                            <div className="absolute inset-0 rounded-full" style={{ backgroundColor: theme.green, opacity: 0.25 }} />
+                            {/* 支出バー：収入に対する割合で左から */}
+                            <div className="absolute top-0 left-0 h-full rounded-full transition-all duration-700"
                               style={{
-                                right: 0,
-                                width: `${Math.min(overRatio * 100 / 0.5 * 20, 28)}%`,
-                                backgroundColor: theme.red,
-                                opacity: 0.7
+                                width: `${expBarPct}%`,
+                                background: expBarPct < 70
+                                  ? `linear-gradient(90deg, ${theme.green}, ${theme.green})`
+                                  : expBarPct < 90
+                                    ? `linear-gradient(90deg, ${theme.green}, ${theme.orange})`
+                                    : `linear-gradient(90deg, ${theme.green}99, ${theme.red})`,
                               }}
                             />
-                          )}
+                            {/* 赤字時：超過分を赤く点滅 */}
+                            {!isPositive && (
+                              <div className="absolute top-0 right-0 h-full w-2 rounded-r-full animate-pulse" style={{ backgroundColor: theme.red }} />
+                            )}
+                          </div>
+
+                          {/* バー下ラベル */}
+                          <div className="flex justify-between mt-1.5">
+                            <p className="text-[9px] font-semibold" style={{ color: theme.green }}>¥0</p>
+                            <p className="text-[9px] font-semibold" style={{ color: isPositive ? theme.green : theme.orange }}>
+                              {isPositive ? `残 ¥${diff.toLocaleString()}` : `収入 ¥${inc.toLocaleString()}`}
+                            </p>
+                          </div>
                         </div>
-                        {/* 余剰ラベル */}
-                        {isPositive && inc > 0 && (
-                          <div className="flex justify-end mt-1.5">
-                            <span className="text-[9px] font-bold tabular-nums" style={{ color: theme.green }}>
-                              余剰 {Math.round((1 - spendRatio) * 100)}%
-                            </span>
-                          </div>
-                        )}
-                        {!isPositive && (
-                          <div className="flex justify-end mt-1.5">
-                            <span className="text-[9px] font-bold tabular-nums" style={{ color: theme.red }}>
-                              赤字 ¥{Math.abs(diff).toLocaleString()}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
+                      );
+                    })() : (
                       <p className={`text-xs text-center py-1 ${theme.textSecondary}`}>取引なし</p>
                     )}
 
