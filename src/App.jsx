@@ -621,7 +621,7 @@ export default function BudgetSimulator() {
       if (t.isRecurring && !t.settled && t.paymentMethod === 'cash' && t.date <= todayStr) {
         return { ...t, settled: true };
       }
-      // クレカ引き落とし予約で引き落とし日が今日以前なら確定に変更（CFに反映）
+      // クレジット引き落とし予約で引き落とし日が今日以前なら確定に変更（CFに反映）
       if (t.isSettlement && !t.settled && t.date <= todayStr) {
         return { ...t, settled: true };
       }
@@ -701,8 +701,9 @@ export default function BudgetSimulator() {
   // カードIDから引き落とし日を計算するヘルパー
   const getSettlementDate = (txDate, cardId) => {
     const card = creditCards.find(c => c.id === cardId) || creditCards[0];
-    if (!card) return new Date(new Date(txDate).getFullYear(), new Date(txDate).getMonth() + 1, 26);
-    const d = new Date(txDate);
+    // "YYYY-MM-DD"文字列をローカル時刻として解釈（toISOString/new Date(str)はUTCになりJSTで1日ずれる）
+    const d = new Date(txDate + 'T00:00:00');
+    if (!card) return new Date(d.getFullYear(), d.getMonth() + 1, 26);
     // 締め日を超えていたら翌月締め → 引き落としはさらにpaymentMonthヶ月後
     const closingDay = card.closingDay;
     const paymentMonth = card.paymentMonth ?? 1; // 1=翌月, 2=翌々月
@@ -914,7 +915,7 @@ export default function BudgetSimulator() {
       const settlementTransaction = {
         id: Date.now() + 1,
         date: settlementDate.toISOString().slice(0, 10),
-        category: `クレカ引落${card ? `（${card.name}）` : ''}`,
+        category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
         amount: amount,
         type: 'expense',
         paymentMethod: 'cash',
@@ -1055,7 +1056,7 @@ export default function BudgetSimulator() {
           ...t,
           amount: updatedTransaction.amount, // 元取引の金額変更に追従
           date: newSettlementDate.toISOString().slice(0, 10),
-          category: `クレカ引落${card ? `（${card.name}）` : ''}`,
+          category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
           settled: newSettlementDate <= new Date(),
           cardId: updatedTransaction.cardId
         };
@@ -2132,13 +2133,14 @@ export default function BudgetSimulator() {
               const thisYearMonth = toYM(today);
               const todayDay = today.getDate();
 
-              // クレカ：カード×引落日でグループ化し内訳も保持
+              // クレカ：カード×引落日でグループ化（通常取引 + クレカ払い定期支払いの実績取引）
               const creditGroups = [];
               creditCards.forEach(card => {
                 const cardTxns = transactions.filter(t => {
                   if (t.amount >= 0 || t.settled || t.paymentMethod !== 'credit') return false;
-                  if (t.cardId && t.cardId !== card.id) return false;
-                  if (!t.cardId && card.id !== creditCards[0]?.id) return false;
+                  // cardIdが一致するか、cardId未設定なら先頭カード扱い
+                  const matchCard = t.cardId ? t.cardId === card.id : card.id === creditCards[0]?.id;
+                  if (!matchCard) return false;
                   const sd = getSettlementDate(t.date, card.id);
                   return sd && toYM(sd) === thisYearMonth;
                 });
@@ -2146,18 +2148,40 @@ export default function BudgetSimulator() {
                 const day = card.paymentDay || 10;
                 const amount = cardTxns.reduce((s, t) => s + Math.abs(t.amount), 0);
                 const isPast = day <= todayDay;
-                const details = cardTxns
+                const details = [...cardTxns]
                   .sort((a, b) => b.date.localeCompare(a.date))
-                  .map(t => ({ date: t.date, category: t.category, memo: t.memo, amount: Math.abs(t.amount) }));
+                  .map(t => ({ date: t.date, category: t.category || '—', memo: t.memo, amount: Math.abs(t.amount) }));
                 creditGroups.push({ kind: 'credit', name: card.name, cardId: card.id, amount, day, isPast, details });
               });
 
-              // 定期固定費
-              const fixedItems = recurringTransactions
-                .filter(r => r.type === 'expense')
-                .map(r => {
+              // 定期支払い：クレカ払い→引落日でcreditGroupsに合算、現金払い→固定費リスト
+              const fixedItems = [];
+              recurringTransactions
+                .filter(r => r.type === 'expense' || r.type === 'investment' || r.type === 'fund' || r.type === 'insurance')
+                .forEach(r => {
                   const day = (!r.recurrenceType || r.recurrenceType === 'monthly-date') ? (r.day || 1) : null;
-                  return { kind: 'fixed', name: r.name, amount: Number(r.amount || 0), day, category: r.category, isPast: day !== null && day <= todayDay };
+                  const amount = Number(r.amount || 0);
+                  if (amount === 0) return;
+
+                  if (r.paymentMethod === 'credit' && r.cardId) {
+                    // クレカ払いの定期支払い → 対象カードのcreditGroupに合算
+                    const card = creditCards.find(c => c.id === r.cardId) || creditCards[0];
+                    if (card) {
+                      const payDay = card.paymentDay || 10;
+                      const existing = creditGroups.find(g => g.cardId === card.id);
+                      const detail = { date: `毎月${day || '?'}日`, category: r.category || r.name, memo: r.name + '（定期）', amount };
+                      if (existing) {
+                        existing.amount += amount;
+                        existing.details.push(detail);
+                      } else {
+                        creditGroups.push({ kind: 'credit', name: card.name, cardId: card.id, amount, day: payDay, isPast: payDay <= todayDay, details: [detail] });
+                      }
+                    }
+                  } else {
+                    // 現金・振替払い → 固定費リスト
+                    const icon = r.type === 'investment' ? '📈' : r.type === 'fund' ? '📊' : r.type === 'insurance' ? '🛡️' : '🔄';
+                    fixedItems.push({ kind: 'fixed', name: r.name, amount, day, category: r.category, isPast: day !== null && day <= todayDay, icon });
+                  }
                 });
 
               const allItems = [...creditGroups, ...fixedItems]
@@ -2207,11 +2231,10 @@ export default function BudgetSimulator() {
                             <div key={i}>
                               {/* メイン行 */}
                               <div
-                                className={`flex items-center px-4 py-2.5 ${canExpand ? 'cursor-pointer' : ''} transition-colors`}
+                                className={`flex items-center px-4 py-2.5 transition-colors ${canExpand ? 'cursor-pointer active:opacity-70' : ''}`}
                                 style={{ opacity: item.isPast ? 0.4 : 1 }}
                                 onClick={() => canExpand && setExpandedCreditGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }))}
                               >
-                                {/* 日付 */}
                                 <div className="w-9 shrink-0 text-center">
                                   {item.day !== null ? (
                                     <>
@@ -2222,11 +2245,9 @@ export default function BudgetSimulator() {
                                     <span className={`text-xs ${theme.textSecondary}`}>—</span>
                                   )}
                                 </div>
-                                {/* アイコン */}
-                                <div className="flex items-center gap-1.5 mx-2">
-                                  <span className="text-sm">{item.kind === 'credit' ? '💳' : '🔄'}</span>
+                                <div className="flex items-center gap-1 mx-2">
+                                  <span className="text-sm">{item.kind === 'credit' ? '💳' : (item.icon || '🔄')}</span>
                                 </div>
-                                {/* 名前・カテゴリ */}
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-1.5">
                                     <p className={`text-sm font-medium truncate ${theme.text}`}>{item.name}</p>
@@ -2236,9 +2257,13 @@ export default function BudgetSimulator() {
                                       </span>
                                     )}
                                   </div>
-                                  {item.category && <p className={`text-[10px] ${theme.textSecondary}`}>{item.category}</p>}
+                                  {item.kind === 'credit' && (
+                                    <p className={`text-[10px] ${theme.textSecondary}`}>クレジット引き落とし</p>
+                                  )}
+                                  {item.category && item.kind !== 'credit' && (
+                                    <p className={`text-[10px] ${theme.textSecondary}`}>{item.category}</p>
+                                  )}
                                 </div>
-                                {/* 金額 + 展開矢印 */}
                                 <div className="flex items-center gap-2 shrink-0">
                                   <div className="text-right">
                                     <p className="text-sm font-bold tabular-nums" style={{ color: item.isPast ? (darkMode ? '#555' : '#bbb') : theme.red }}>
@@ -2258,11 +2283,11 @@ export default function BudgetSimulator() {
                                   {item.details.map((d, di) => (
                                     <div key={di} className="flex items-center pl-14 pr-4 py-2" style={{ borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}>
                                       <div className="flex-1 min-w-0">
-                                        <p className={`text-xs font-medium truncate ${theme.text}`}>{d.category || '—'}</p>
+                                        <p className={`text-xs font-medium truncate ${theme.text}`}>{d.category}</p>
                                         {d.memo && <p className={`text-[10px] truncate ${theme.textSecondary}`}>{d.memo}</p>}
                                         <p className={`text-[10px] ${theme.textSecondary}`}>{d.date}</p>
                                       </div>
-                                      <p className="text-xs font-bold tabular-nums shrink-0" style={{ color: darkMode ? '#888' : '#aaa' }}>
+                                      <p className="text-xs font-bold tabular-nums shrink-0 ml-3" style={{ color: darkMode ? '#888' : '#aaa' }}>
                                         ¥{d.amount.toLocaleString()}
                                       </p>
                                     </div>
@@ -3914,6 +3939,42 @@ export default function BudgetSimulator() {
                 </div>
               </div>
 
+              {/* 支払い方法（全種類で選択可） */}
+              <div>
+                <label className={`block text-sm font-medium ${theme.textSecondary} mb-2`}>支払い方法</label>
+                <div className="flex gap-2 mb-2">
+                  {[
+                    { key: 'cash', label: '💵 現金・振替' },
+                    { key: 'credit', label: '💳 クレジット' },
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setEditingRecurring({ ...editingRecurring, paymentMethod: key, cardId: key === 'credit' ? (editingRecurring?.cardId || creditCards[0]?.id) : null })}
+                      className="flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200"
+                      style={{
+                        backgroundColor: (editingRecurring?.paymentMethod || 'cash') === key ? theme.accent : (darkMode ? '#1C1C1E' : '#f5f5f5'),
+                        color: (editingRecurring?.paymentMethod || 'cash') === key ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
+                      }}
+                    >{label}</button>
+                  ))}
+                </div>
+                {(editingRecurring?.paymentMethod === 'credit') && creditCards.length > 0 && (
+                  <div className="flex gap-1.5 flex-wrap">
+                    {creditCards.map(card => (
+                      <button
+                        key={card.id}
+                        onClick={() => setEditingRecurring({ ...editingRecurring, cardId: card.id })}
+                        className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                        style={{
+                          backgroundColor: (editingRecurring?.cardId || creditCards[0]?.id) === card.id ? theme.accent : (darkMode ? '#2a2a2a' : '#f0f0f0'),
+                          color: (editingRecurring?.cardId || creditCards[0]?.id) === card.id ? '#fff' : (darkMode ? '#d4d4d4' : '#737373'),
+                        }}
+                      >{card.name}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button
                 onClick={() => {
                   if (!editingRecurring?.name || !editingRecurring?.amount || !editingRecurring?.category || !editingRecurring?.day) {
@@ -4495,7 +4556,7 @@ export default function BudgetSimulator() {
             emoji: '💳',
             title: '取引の記録',
             subtitle: '支出・収入を素早く入力',
-            desc: 'ホームの「取引を追加」から入力します。クレジットカードで支払うと、翌月の引き落とし予約が自動で作られます。クレカ設定で締め日・引き落とし日を設定しましょう。',
+            desc: 'ホームの「取引を追加」から入力します。クレジットカードで支払うと、翌月の引き落とし予約が自動で作られます。クレジットカード設定で締め日・引き落とし日を設定しましょう。',
             color: '#a855f7',
             tips: ['💵 現金は即確定、💳 クレカは翌月CFに反映', '支出・収入のどちらも記録できます'],
           },
@@ -5102,7 +5163,7 @@ export default function BudgetSimulator() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className={`${theme.cardGlass} rounded-2xl p-6 max-w-md w-full max-h-[85vh] overflow-y-auto animate-slideUp`}>
             <h2 className={`text-xl font-bold ${theme.text} mb-4`}>
-              {editingTransaction.isSettlement ? 'クレカ引落予定' : '取引を編集'}
+              {editingTransaction.isSettlement ? 'クレジット引き落とし予定' : '取引を編集'}
             </h2>
 
             {/* 引き落とし予約は読み取り専用 */}
