@@ -243,6 +243,7 @@ export default function BudgetSimulator() {
   const [showSplitList, setShowSplitList] = useState(false);
   const [showRecurringList, setShowRecurringList] = useState(false);
   const [showCFList, setShowCFList] = useState(false);
+  const [expandedCreditGroups, setExpandedCreditGroups] = useState({});
   const [summaryMonthOffset, setSummaryMonthOffset] = useState(0); // 0=今月, -1=先月...
 
   useEffect(() => { saveToStorage('creditCards', creditCards); }, [creditCards]);
@@ -2127,26 +2128,31 @@ export default function BudgetSimulator() {
             {/* 予定CF：今月の引き落とし・支払い予定 */}
             {(() => {
               const today = new Date();
-              const thisYearMonth = today.toISOString().slice(0, 7);
+              const toYM = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+              const thisYearMonth = toYM(today);
               const todayDay = today.getDate();
 
-              const creditItems = [];
+              // クレカ：カード×引落日でグループ化し内訳も保持
+              const creditGroups = [];
               creditCards.forEach(card => {
-                const amount = transactions
-                  .filter(t => {
-                    if (t.amount >= 0 || t.settled || t.paymentMethod !== 'credit') return false;
-                    if (t.cardId && t.cardId !== card.id) return false;
-                    if (!t.cardId && card.id !== creditCards[0]?.id) return false;
-                    const sd = getSettlementDate(t.date, card.id);
-                    return sd && sd.toISOString().slice(0, 7) === thisYearMonth;
-                  })
-                  .reduce((s, t) => s + Math.abs(t.amount), 0);
-                if (amount > 0) {
-                  const isPast = (card.paymentDay || 10) <= todayDay;
-                  creditItems.push({ kind: 'credit', name: card.name, amount, day: card.paymentDay || 10, isPast });
-                }
+                const cardTxns = transactions.filter(t => {
+                  if (t.amount >= 0 || t.settled || t.paymentMethod !== 'credit') return false;
+                  if (t.cardId && t.cardId !== card.id) return false;
+                  if (!t.cardId && card.id !== creditCards[0]?.id) return false;
+                  const sd = getSettlementDate(t.date, card.id);
+                  return sd && toYM(sd) === thisYearMonth;
+                });
+                if (cardTxns.length === 0) return;
+                const day = card.paymentDay || 10;
+                const amount = cardTxns.reduce((s, t) => s + Math.abs(t.amount), 0);
+                const isPast = day <= todayDay;
+                const details = cardTxns
+                  .sort((a, b) => b.date.localeCompare(a.date))
+                  .map(t => ({ date: t.date, category: t.category, memo: t.memo, amount: Math.abs(t.amount) }));
+                creditGroups.push({ kind: 'credit', name: card.name, cardId: card.id, amount, day, isPast, details });
               });
 
+              // 定期固定費
               const fixedItems = recurringTransactions
                 .filter(r => r.type === 'expense')
                 .map(r => {
@@ -2154,7 +2160,7 @@ export default function BudgetSimulator() {
                   return { kind: 'fixed', name: r.name, amount: Number(r.amount || 0), day, category: r.category, isPast: day !== null && day <= todayDay };
                 });
 
-              const allItems = [...creditItems, ...fixedItems]
+              const allItems = [...creditGroups, ...fixedItems]
                 .filter(i => i.amount > 0)
                 .sort((a, b) => (a.day ?? 99) - (b.day ?? 99));
 
@@ -2165,7 +2171,7 @@ export default function BudgetSimulator() {
 
               return (
                 <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
-                  {/* ヘッダー（常時表示） */}
+                  {/* ヘッダー */}
                   <div className="px-4 pt-3 pb-2">
                     <div className="flex items-center justify-between mb-1.5">
                       <button
@@ -2189,37 +2195,83 @@ export default function BudgetSimulator() {
                     </div>
                   </div>
 
-                  {/* 展開コンテンツ */}
+                  {/* 展開リスト */}
                   {showCFList && (
-                    <div className={`border-t animate-fadeIn`} style={{ borderColor: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
+                    <div className="border-t animate-fadeIn" style={{ borderColor: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)' }}>
                       <div className="divide-y" style={{ borderColor: darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)' }}>
-                        {allItems.map((item, idx) => (
-                          <div key={idx} className="flex items-center px-4 py-2.5" style={{ opacity: item.isPast ? 0.4 : 1 }}>
-                            <div className="w-9 shrink-0 text-center">
-                              {item.day !== null ? (
-                                <>
-                                  <p className={`text-sm font-black tabular-nums leading-tight ${item.isPast ? theme.textSecondary : theme.text}`}>{item.day}</p>
-                                  <p className={`text-[8px] ${theme.textSecondary} leading-none`}>日</p>
-                                </>
-                              ) : (
-                                <span className={`text-xs ${theme.textSecondary}`}>—</span>
+                        {allItems.map((item, i) => {
+                          const groupKey = item.kind === 'credit' ? `credit-${item.cardId}` : `fixed-${i}`;
+                          const isExpanded = !!expandedCreditGroups[groupKey];
+                          const canExpand = item.kind === 'credit' && item.details && item.details.length > 1;
+                          return (
+                            <div key={i}>
+                              {/* メイン行 */}
+                              <div
+                                className={`flex items-center px-4 py-2.5 ${canExpand ? 'cursor-pointer' : ''} transition-colors`}
+                                style={{ opacity: item.isPast ? 0.4 : 1 }}
+                                onClick={() => canExpand && setExpandedCreditGroups(prev => ({ ...prev, [groupKey]: !prev[groupKey] }))}
+                              >
+                                {/* 日付 */}
+                                <div className="w-9 shrink-0 text-center">
+                                  {item.day !== null ? (
+                                    <>
+                                      <p className={`text-sm font-black tabular-nums leading-tight ${item.isPast ? theme.textSecondary : theme.text}`}>{item.day}</p>
+                                      <p className={`text-[8px] ${theme.textSecondary} leading-none`}>日</p>
+                                    </>
+                                  ) : (
+                                    <span className={`text-xs ${theme.textSecondary}`}>—</span>
+                                  )}
+                                </div>
+                                {/* アイコン */}
+                                <div className="flex items-center gap-1.5 mx-2">
+                                  <span className="text-sm">{item.kind === 'credit' ? '💳' : '🔄'}</span>
+                                </div>
+                                {/* 名前・カテゴリ */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <p className={`text-sm font-medium truncate ${theme.text}`}>{item.name}</p>
+                                    {canExpand && (
+                                      <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold shrink-0 ${darkMode ? 'bg-neutral-700 text-neutral-400' : 'bg-neutral-200 text-neutral-500'}`}>
+                                        {item.details.length}件
+                                      </span>
+                                    )}
+                                  </div>
+                                  {item.category && <p className={`text-[10px] ${theme.textSecondary}`}>{item.category}</p>}
+                                </div>
+                                {/* 金額 + 展開矢印 */}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <div className="text-right">
+                                    <p className="text-sm font-bold tabular-nums" style={{ color: item.isPast ? (darkMode ? '#555' : '#bbb') : theme.red }}>
+                                      ¥{item.amount.toLocaleString()}
+                                    </p>
+                                    {item.isPast && <p className="text-[9px] text-green-500 font-bold">完了</p>}
+                                  </div>
+                                  {canExpand && (
+                                    <span className={`text-xs ${theme.textSecondary} transition-transform duration-200`} style={{ display: 'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* 内訳（展開時） */}
+                              {canExpand && isExpanded && (
+                                <div className="animate-fadeIn" style={{ backgroundColor: darkMode ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)' }}>
+                                  {item.details.map((d, di) => (
+                                    <div key={di} className="flex items-center pl-14 pr-4 py-2" style={{ borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}>
+                                      <div className="flex-1 min-w-0">
+                                        <p className={`text-xs font-medium truncate ${theme.text}`}>{d.category || '—'}</p>
+                                        {d.memo && <p className={`text-[10px] truncate ${theme.textSecondary}`}>{d.memo}</p>}
+                                        <p className={`text-[10px] ${theme.textSecondary}`}>{d.date}</p>
+                                      </div>
+                                      <p className="text-xs font-bold tabular-nums shrink-0" style={{ color: darkMode ? '#888' : '#aaa' }}>
+                                        ¥{d.amount.toLocaleString()}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
                               )}
                             </div>
-                            <div className="flex items-center gap-1.5 mx-2">
-                              <span className="text-sm">{item.kind === 'credit' ? '💳' : '🔄'}</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className={`text-sm font-medium truncate ${theme.text}`}>{item.name}</p>
-                              {item.category && <p className={`text-[10px] ${theme.textSecondary}`}>{item.category}</p>}
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-sm font-bold tabular-nums" style={{ color: item.isPast ? (darkMode ? '#555' : '#bbb') : theme.red }}>
-                                ¥{item.amount.toLocaleString()}
-                              </p>
-                              {item.isPast && <p className="text-[9px] text-green-500 font-bold">完了</p>}
-                            </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
                   )}
