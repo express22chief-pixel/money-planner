@@ -764,20 +764,23 @@ export default function BudgetSimulator() {
   // カードIDから引き落とし日を計算するヘルパー
   const getSettlementDate = (txDate, cardId) => {
     const card = creditCards.find(c => c.id === cardId) || creditCards[0];
-    // "YYYY-MM-DD"文字列をローカル時刻として解釈（toISOString/new Date(str)はUTCになりJSTで1日ずれる）
     const d = new Date(txDate + 'T00:00:00');
     if (!card) return new Date(d.getFullYear(), d.getMonth() + 1, 26);
-    // 締め日を超えていたら翌月締め → 引き落としはさらにpaymentMonthヶ月後
+  
     const closingDay = card.closingDay;
-    const paymentMonth = card.paymentMonth ?? 1; // 1=翌月, 2=翌々月
+    const paymentMonth = card.paymentMonth ?? 1;
     const paymentDay = card.paymentDay;
-    let billingMonth = d.getMonth(); // 0-indexed
+  
+    let year = d.getFullYear();
+    let month = d.getMonth(); // 0-indexed
     if (d.getDate() > closingDay) {
-      billingMonth += 1; // 翌月締め
+      month += 1;
+      if (month > 11) { month = 0; year += 1; }
     }
-    const payYear = d.getFullYear() + Math.floor((billingMonth + paymentMonth) / 12);
-    const payMonth = (billingMonth + paymentMonth) % 12;
-    return new Date(payYear, payMonth, paymentDay);
+    month += paymentMonth;
+    if (month > 11) { month -= 12; year += 1; }
+  
+    return new Date(year, month, paymentDay);
   };
 
   const calculateMonthlyBalance = (yearMonth) => {
@@ -1100,8 +1103,8 @@ export default function BudgetSimulator() {
   };
 
   const deleteTransaction = (id) => {
-    setTransactions(transactions.filter(t => t.id !== id));
-    // 対応する立替レコードも削除（孤立防止）
+    // 元取引に紐づく引き落とし予約も一緒に削除
+    setTransactions(transactions.filter(t => t.id !== id && t.parentTransactionId !== id));
     setSplitPayments(prev => prev.filter(s => s.transactionId !== id));
   };
 
@@ -4182,9 +4185,22 @@ export default function BudgetSimulator() {
                         splitMembers: []
                       };
                       if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
-                        const sd = new Date(selectedDate);
-                        const settlementDate = new Date(sd.getFullYear(), sd.getMonth() + 1, 26).toISOString().slice(0, 10);
-                        setTransactions([t, { id: Date.now()+1, date: settlementDate, category: 'クレジット引き落とし', amount: amt, type: 'expense', paymentMethod: 'cash', settled: false, isSettlement: true }, ...transactions]);
+                        const cardId = newTransaction.cardId || creditCards[0]?.id;
+                        const card = creditCards.find(c => c.id === cardId);
+                        const settlementDate = getSettlementDate(selectedDate, cardId);
+                        const settlementTx = {
+                          id: Date.now() + 1,
+                          date: settlementDate.toISOString().slice(0, 10),
+                          category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
+                          amount: amt,
+                          type: 'expense',
+                          paymentMethod: 'cash',
+                          settled: settlementDate <= new Date(),
+                          isSettlement: true,
+                          parentTransactionId: t.id,
+                          cardId: cardId
+                        };
+                        setTransactions([{ ...t, cardId }, settlementTx, ...transactions]);
                       } else {
                         setTransactions([t, ...transactions]);
                       }
