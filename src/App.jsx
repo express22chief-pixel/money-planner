@@ -1,6 +1,32 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlusCircle, TrendingUp, Calendar, DollarSign, Sun, Moon, Zap, Droplets, Target, Settings, Edit2, RefreshCw } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, BarChart, Bar } from 'recharts';
+
+// 設定タブ用アコーディオン（コンポーネント外定義でパフォーマンス最適化）
+function AccSection({ id, title, icon, children, expanded, onToggle, darkMode, theme }) {
+  return (
+    <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
+      <button
+        onClick={() => onToggle(id)}
+        className="w-full flex items-center justify-between px-4 py-3.5 transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="text-base">{icon}</span>
+          <span className={`text-sm font-semibold ${theme.text}`}>{title}</span>
+        </div>
+        <span
+          className={`text-xs transition-transform duration-200 ${theme.textSecondary}`}
+          style={{ display: 'inline-block', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+        >▼</span>
+      </button>
+      {expanded && (
+        <div className={`px-4 pb-4 border-t ${theme.border} animate-fadeIn`}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function BudgetSimulator() {
   const [activeTab, setActiveTab] = useState('home');
@@ -244,7 +270,7 @@ export default function BudgetSimulator() {
   const [showRecurringList, setShowRecurringList] = useState(false);
   const [showCFList, setShowCFList] = useState(false);
   const [showAddTransaction, setShowAddTransaction] = useState(false);
-  const [recentTxnLimit, setRecentTxnLimit] = useState(7);
+  const [recentTxnLimit, setRecentTxnLimit] = useState(5);
   const [settingsExpanded, setSettingsExpanded] = useState({ appearance: true, profile: true, budget: false, investment: false, category: false, creditcard: false, data: false }); // FABからの取引入力モーダル
   const [expandedCreditGroups, setExpandedCreditGroups] = useState({});
   const [summaryMonthOffset, setSummaryMonthOffset] = useState(0); // 0=今月, -1=先月...
@@ -818,7 +844,7 @@ export default function BudgetSimulator() {
 
 
   const currentMonth = new Date().toISOString().slice(0, 7);
-  const currentBalance = calculateMonthlyBalance(currentMonth);
+  const currentBalance = useMemo(() => calculateMonthlyBalance(currentMonth), [transactions, currentMonth]);
 
   // 過去6ヶ月のうち、取引があるのに未締めの月を返す
   const getUnclosedMonths = () => {
@@ -912,7 +938,7 @@ export default function BudgetSimulator() {
     };
   };
 
-  const budgetAnalysis = calculateBudgetAnalysis();
+  const budgetAnalysis = useMemo(() => calculateBudgetAnalysis(), [transactions, monthlyBudget, currentMonth, simulationSettings]);
 
 
 
@@ -1487,8 +1513,8 @@ export default function BudgetSimulator() {
 
 
 
-  const simulationResults = calculateSimulation();
-  const monteCarloResults = simulationSettings.showMonteCarloSimulation ? runMonteCarloSimulation(100) : [];
+  const simulationResults = useMemo(() => calculateSimulation(), [simulationSettings, assetData]);
+  const monteCarloResults = useMemo(() => simulationSettings.showMonteCarloSimulation ? runMonteCarloSimulation(100) : [], [simulationSettings, assetData]);
   const finalValue = simulationResults[simulationResults.length - 1]?.totalValue || 0;
   const achievement = Math.min((finalValue / simulationSettings.targetAmount) * 100, 100);
   const totalTaxSaved = simulationResults[simulationResults.length - 1]?.taxSaved || 0;
@@ -1497,23 +1523,23 @@ export default function BudgetSimulator() {
   const futureAge = (userInfo?.age ? Number(userInfo.age) : 25) + simulationSettings.years;
   const futureBenchmark = calculateBenchmark(futureAge);
 
-  const chartData = simulationResults.map(result => ({
+  const chartData = useMemo(() => simulationResults.map(result => ({
     年: `${result.year}年`,
     貯金: result.savings,
     課税口座: result.regularInvestment,
     NISA: result.nisaInvestment,
     待機資金: result.dryPowder,
     合計: result.totalValue
-  }));
+  })), [simulationResults]);
 
-  const monteCarloChartData = monteCarloResults.map(result => ({
+  const monteCarloChartData = useMemo(() => monteCarloResults.map(result => ({
     年: `${result.year}年`,
     平均: result.average,
     最小: result.min,
     最大: result.max,
     範囲下限: result.p25,
     範囲上限: result.p75
-  }));
+  })), [monteCarloResults]);
 
   const lifeEventTemplates = [
     { name: '結婚', estimatedAmount: 3000000, icon: '💍', type: 'expense' },
@@ -2256,6 +2282,14 @@ export default function BudgetSimulator() {
                       </div>
                     </div>
                   ))}
+                  {transactions.length > recentTxnLimit && (
+                    <button
+                      onClick={() => setRecentTxnLimit(prev => prev + 10)}
+                      className={`w-full mt-2 py-2.5 rounded-xl text-xs font-semibold transition-all ${darkMode ? 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'}`}
+                    >
+                      もっと見る（残り {transactions.length - recentTxnLimit} 件）
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -2913,34 +2947,11 @@ export default function BudgetSimulator() {
           </div>
         )}
 
-        {activeTab === 'settings' && (() => {
-          const AccSection = ({ id, title, icon, children, defaultOpen }) => {
-            const isOpen = settingsExpanded[id] !== undefined ? settingsExpanded[id] : !!defaultOpen;
-            return (
-              <div className={`${theme.cardGlass} rounded-xl overflow-hidden`}>
-                <button
-                  onClick={() => setSettingsExpanded(prev => ({ ...prev, [id]: !isOpen }))}
-                  className={`w-full flex items-center justify-between px-4 py-3.5 transition-colors ${isOpen ? '' : ''}`}
-                >
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-base">{icon}</span>
-                    <span className={`text-sm font-semibold ${theme.text}`}>{title}</span>
-                  </div>
-                  <span className={`text-xs transition-transform duration-200 ${theme.textSecondary}`}
-                    style={{ display: 'inline-block', transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}>▼</span>
-                </button>
-                {isOpen && (
-                  <div className={`px-4 pb-4 border-t ${theme.border} animate-fadeIn`}>
-                    {children}
-                  </div>
-                )}
-              </div>
-            );
-          };
-          return (
+        {activeTab === 'settings' && (
           <div className="space-y-2 animate-fadeIn pb-6">
 
-            <AccSection id="appearance" icon="🌙" title="外観" defaultOpen={true}>
+            <AccSection id="appearance" icon="🌙" title="外観" expanded={settingsExpanded['appearance']} onToggle={(id) => setSettingsExpanded(prev => ({...prev, [id]: !prev[id]}))}
+              darkMode={darkMode} theme={theme}>
               <div className="flex items-center justify-between pt-3">
                 <div>
                   <p className={`text-sm font-semibold ${theme.text}`}>ダークモード</p>
@@ -2953,7 +2964,8 @@ export default function BudgetSimulator() {
               </div>
             </AccSection>
 
-            <AccSection id="profile" icon="👤" title="プロフィール" defaultOpen={true}>
+            <AccSection id="profile" icon="👤" title="プロフィール" expanded={settingsExpanded['profile']} onToggle={(id) => setSettingsExpanded(prev => ({...prev, [id]: !prev[id]}))}
+              darkMode={darkMode} theme={theme}>
               <div className="grid grid-cols-2 gap-3 pt-3">
                 <div>
                   <label className={`block text-xs font-medium ${theme.textSecondary} mb-1.5`}>名前</label>
@@ -2973,7 +2985,8 @@ export default function BudgetSimulator() {
               )}
             </AccSection>
 
-            <AccSection id="budget" icon="📊" title="月間予算">
+            <AccSection id="budget" icon="📊" title="月間予算" expanded={settingsExpanded['budget']} onToggle={(id) => setSettingsExpanded(prev => ({...prev, [id]: !prev[id]}))}
+              darkMode={darkMode} theme={theme}>
               <div className="space-y-3 pt-3">
                 <div>
                   <label className={`block text-xs font-medium ${theme.textSecondary} mb-1`}>月間収入予定</label>
@@ -3013,7 +3026,8 @@ export default function BudgetSimulator() {
               </div>
             </AccSection>
 
-            <AccSection id="investment" icon="📈" title="積立・投資目標">
+            <AccSection id="investment" icon="📈" title="積立・投資目標" expanded={settingsExpanded['investment']} onToggle={(id) => setSettingsExpanded(prev => ({...prev, [id]: !prev[id]}))}
+              darkMode={darkMode} theme={theme}>
               <div className="space-y-4 pt-3">
                 {[
                   { key: 'targetAmount', label: '目標金額', min: 1000000, max: 500000000, step: 1000000, fmt: v => v >= 100000000 ? `¥${(v/100000000).toFixed(1)}億` : `¥${(v/10000).toFixed(0)}万` },
@@ -3057,7 +3071,8 @@ export default function BudgetSimulator() {
               </div>
             </AccSection>
 
-            <AccSection id="category" icon="🏷️" title="カテゴリ管理">
+            <AccSection id="category" icon="🏷️" title="カテゴリ管理" expanded={settingsExpanded['category']} onToggle={(id) => setSettingsExpanded(prev => ({...prev, [id]: !prev[id]}))}
+              darkMode={darkMode} theme={theme}>
               <div className="pt-3">
                 <div className="flex gap-2 mb-3">
                   {['expense', 'income'].map(type => (
@@ -3096,7 +3111,8 @@ export default function BudgetSimulator() {
               </div>
             </AccSection>
 
-            <AccSection id="creditcard" icon="💳" title="クレジットカード">
+            <AccSection id="creditcard" icon="💳" title="クレジットカード" expanded={settingsExpanded['creditcard']} onToggle={(id) => setSettingsExpanded(prev => ({...prev, [id]: !prev[id]}))}
+              darkMode={darkMode} theme={theme}>
               <div className="pt-3">
                 <div className="flex justify-end mb-3">
                   <button onClick={() => { setEditingCard(null); setShowCardModal(true); }}
@@ -3123,7 +3139,8 @@ export default function BudgetSimulator() {
               </div>
             </AccSection>
 
-            <AccSection id="data" icon="💾" title="データ管理">
+            <AccSection id="data" icon="💾" title="データ管理" expanded={settingsExpanded['data']} onToggle={(id) => setSettingsExpanded(prev => ({...prev, [id]: !prev[id]}))}
+              darkMode={darkMode} theme={theme}>
               <div className="space-y-2 pt-3">
                 <button
                   onClick={() => {
@@ -3151,8 +3168,7 @@ export default function BudgetSimulator() {
             </AccSection>
 
           </div>
-          );
-        })()}
+        )}
 
       </div>
       {showAssetEditModal && (
@@ -5261,14 +5277,7 @@ export default function BudgetSimulator() {
                   {!editingTransaction?.splitSettled && (
                     <p className={`text-xs mt-2 ${theme.textSecondary}`}>⏳ ホームの「立替待ち」リストから人ごとに精算できます</p>
                   )}
-                  {transactions.length > recentTxnLimit && (
-                    <button
-                      onClick={() => setRecentTxnLimit(prev => prev + 10)}
-                      className={`w-full mt-2 py-2 rounded-xl text-xs font-semibold transition-all ${darkMode ? 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700' : 'bg-neutral-50 text-neutral-500 hover:bg-neutral-100'}`}
-                    >
-                      もっと見る（残り{transactions.length - recentTxnLimit}件）
-                    </button>
-                  )}
+
                 </div>
               )}
             </div>
