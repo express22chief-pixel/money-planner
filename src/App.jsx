@@ -2327,7 +2327,7 @@ export default function BudgetSimulator() {
 
               {/* 検索・フィルター */}
               <div className="flex gap-2 mb-3">
-                <div className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-xl ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
+                <div className={`flex-1 flex items-center gap-2 px-2.5 py-2 rounded-xl ${darkMode ? 'bg-neutral-800 border border-neutral-700' : 'bg-neutral-50 border border-neutral-200'}`}>
                   <span className={`text-xs ${theme.textSecondary}`}>🔍</span>
                   <input
                     type="text"
