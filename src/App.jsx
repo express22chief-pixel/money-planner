@@ -5575,7 +5575,7 @@ export default function BudgetSimulator() {
                 <select id="card-payment-day"
                   defaultValue={editingCard ? editingCard.paymentDay : 27}
                   className={`w-full px-3 py-2.5 rounded-xl text-sm ${darkMode ? 'bg-neutral-800 text-white border border-neutral-600' : 'bg-white border border-neutral-200'} focus:outline-none`}>
-                  {[1,5,10,15,20,25,27,28].map(d => <option key={d} value={d}>{d}日</option>)}
+                  {[1,5,10,15,20,25,26,27,28].map(d => <option key={d} value={d}>{d}日</option>)}
                 </select>
               </div>
               <button
