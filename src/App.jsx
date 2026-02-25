@@ -1013,7 +1013,7 @@ if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credi
   const settlementTransaction = {
     id: Date.now() + 1,
     date: settlementDate.toISOString().slice(0, 10),
-    category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
+    category: 'クレジット引き落とし' + (card ? '（' + card.name + '）' : ''),
     amount: amount,
     type: 'expense',
     paymentMethod: 'cash',
@@ -1158,7 +1158,7 @@ return {
 …t,
 amount: updatedTransaction.amount, // 元取引の金額変更に追従
 date: newSettlementDate.toISOString().slice(0, 10),
-category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
+category: ‘クレジット引き落とし’ + (card ? ‘（’ + card.name + ‘）’ : ‘’),
 settled: newSettlementDate <= new Date(),
 cardId: updatedTransaction.cardId
 };
@@ -4247,7 +4247,7 @@ className={`p-2 rounded-lg transition-all duration-200 hover-scale ${darkMode ? 
                     const settlementTx = {
                       id: Date.now() + 1,
                       date: settlementDate.toISOString().slice(0, 10),
-                      category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
+                      category: 'クレジット引き落とし' + (card ? '（' + card.name + '）' : ''),
                       amount: amt,
                       type: 'expense',
                       paymentMethod: 'cash',
