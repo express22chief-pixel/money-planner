@@ -254,7 +254,7 @@ export default function BudgetSimulator() {
     memo: '',
     isSplit: false,
     splitMembers: [],
-    cardId: creditCards[0] ? creditCards[0].id : null
+    cardId: null
   });
 
   // クレジットカード設定 state: { id, name, closingDay, paymentDay }
@@ -1022,7 +1022,7 @@ export default function BudgetSimulator() {
       memo: '',
       isSplit: false,
       splitMembers: [],
-      cardId: creditCards[0] ? creditCards[0].id : null
+      cardId: null
     });
   };
 
