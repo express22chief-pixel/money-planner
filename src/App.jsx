@@ -254,7 +254,7 @@ export default function BudgetSimulator() {
     memo: '',
     isSplit: false,
     splitMembers: [],
-    cardId: null
+    cardId: creditCards[0] ? creditCards[0].id : null
   });
 
   // クレジットカード設定 state: { id, name, closingDay, paymentDay }
@@ -976,19 +976,20 @@ export default function BudgetSimulator() {
   
     // クレジット取引の場合、カード設定に基づいて引き落とし予約を自動作成
     if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
-      const settlementDate = getSettlementDate(newTransaction.date, newTransaction.cardId);
-      const card = creditCards.find(c => c.id === newTransaction.cardId);
+      const resolvedCardId = newTransaction.cardId || (creditCards[0] ? creditCards[0].id : null);
+      const settlementDate = getSettlementDate(newTransaction.date, resolvedCardId);
+      const card = creditCards.find(c => c.id === resolvedCardId);
       const settlementTransaction = {
         id: Date.now() + 1,
         date: settlementDate.toISOString().slice(0, 10),
-        category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
+        category: 'クレジット引き落とし' + (card ? '（' + card.name + '）' : ''),
         amount: amount,
         type: 'expense',
         paymentMethod: 'cash',
-        settled: settlementDate <= new Date(), // 引き落とし日が過去ならすぐ確定
+        settled: settlementDate <= new Date(),
         isSettlement: true,
-        parentTransactionId: transaction.id, // 元取引との紐づけ
-        cardId: newTransaction.cardId
+        parentTransactionId: transaction.id,
+        cardId: resolvedCardId
       };
       setTransactions([transaction, settlementTransaction, ...transactions]);
     } else {
@@ -1021,7 +1022,7 @@ export default function BudgetSimulator() {
       memo: '',
       isSplit: false,
       splitMembers: [],
-      cardId: null
+      cardId: creditCards[0] ? creditCards[0].id : null
     });
   };
 
@@ -1103,7 +1104,6 @@ export default function BudgetSimulator() {
   };
 
   const deleteTransaction = (id) => {
-    // 元取引に紐づく引き落とし予約も一緒に削除
     setTransactions(transactions.filter(t => t.id !== id && t.parentTransactionId !== id));
     setSplitPayments(prev => prev.filter(s => s.transactionId !== id));
   };
@@ -1122,7 +1122,7 @@ export default function BudgetSimulator() {
           ...t,
           amount: updatedTransaction.amount, // 元取引の金額変更に追従
           date: newSettlementDate.toISOString().slice(0, 10),
-          category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
+          category: 'クレジット引き落とし' + (card ? '（' + card.name + '）' : ''),
           settled: newSettlementDate <= new Date(),
           cardId: updatedTransaction.cardId
         };
@@ -3244,6 +3244,18 @@ export default function BudgetSimulator() {
                 </button>
                 <button
                   onClick={() => {
+                    const parentIds = new Set(transactions.filter(t => !t.isSettlement).map(t => t.id));
+                    const orphans = transactions.filter(t => t.isSettlement && t.parentTransactionId && !parentIds.has(t.parentTransactionId));
+                    if (orphans.length === 0) { alert('孤立した引き落とし予約はありませんでした。'); return; }
+                    if (!confirm('孤立した引き落とし予約が' + orphans.length + '件見つかりました。削除しますか？')) return;
+                    setTransactions(prev => prev.filter(t => !orphans.find(o => o.id === t.id)));
+                  }}
+                  className={"w-full py-2.5 rounded-xl text-sm font-semibold border-2 transition-all hover-scale " + (darkMode ? "border-orange-500/30 text-orange-400" : "border-orange-400/40 text-orange-500")}
+                >
+                  🧹 孤立した引き落とし予約を削除
+                </button>
+                <button
+                  onClick={() => {
                     if (!confirm('全データをリセットしますか？この操作は取り消せません。')) return;
                     setTransactions([]); setRecurringTransactions([]); setMonthlyHistory({});
                     setAssetData({ savings: 0, investments: 0, nisa: 0, dryPowder: 0 });
@@ -4185,13 +4197,13 @@ export default function BudgetSimulator() {
                         splitMembers: []
                       };
                       if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
-                        const cardId = newTransaction.cardId || creditCards[0]?.id;
+                        const cardId = newTransaction.cardId || (creditCards[0] ? creditCards[0].id : null);
                         const card = creditCards.find(c => c.id === cardId);
                         const settlementDate = getSettlementDate(selectedDate, cardId);
                         const settlementTx = {
                           id: Date.now() + 1,
                           date: settlementDate.toISOString().slice(0, 10),
-                          category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
+                          category: 'クレジット引き落とし' + (card ? '（' + card.name + '）' : ''),
                           amount: amt,
                           type: 'expense',
                           paymentMethod: 'cash',
