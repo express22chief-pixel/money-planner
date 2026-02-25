@@ -173,6 +173,8 @@ export default function BudgetSimulator() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showRecurringModal, setShowRecurringModal] = useState(false);
   const [showAssetEditModal, setShowAssetEditModal] = useState(false);
+  const [showCardModal, setShowCardModal] = useState(false);
+  const [editingCard, setEditingCard] = useState(null);
   const [showDateTransactionsModal, setShowDateTransactionsModal] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryType, setNewCategoryType] = useState('expense');
@@ -763,23 +765,24 @@ export default function BudgetSimulator() {
   };
   // カードIDから引き落とし日を計算するヘルパー
   const getSettlementDate = (txDate, cardId) => {
-    const card = creditCards.find(c => c.id === cardId) || creditCards[0];
+    const resolvedId = cardId || (creditCards[0] && creditCards[0].id);
+    const card = creditCards.find(c => c.id === resolvedId) || creditCards[0];
     const d = new Date(txDate + 'T00:00:00');
     if (!card) return new Date(d.getFullYear(), d.getMonth() + 1, 26);
-  
+
     const closingDay = card.closingDay;
-    const paymentMonth = card.paymentMonth ?? 1;
+    const paymentMonth = card.paymentMonth !== undefined ? card.paymentMonth : 1;
     const paymentDay = card.paymentDay;
-  
+
     let year = d.getFullYear();
-    let month = d.getMonth(); // 0-indexed
+    let month = d.getMonth();
     if (d.getDate() > closingDay) {
       month += 1;
       if (month > 11) { month = 0; year += 1; }
     }
     month += paymentMonth;
     if (month > 11) { month -= 12; year += 1; }
-  
+
     return new Date(year, month, paymentDay);
   };
 
