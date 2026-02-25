@@ -254,7 +254,7 @@ export default function BudgetSimulator() {
     memo: '',
     isSplit: false,
     splitMembers: [],
-    cardId: (creditCards[0] && creditCards[0].id) || null
+    cardId: null
   });
 
   // クレジットカード設定 state: { id, name, closingDay, paymentDay }
@@ -763,21 +763,23 @@ export default function BudgetSimulator() {
   };
   // カードIDから引き落とし日を計算するヘルパー
   const getSettlementDate = (txDate, cardId) => {
-    const resolvedId = cardId || (creditCards[0] && creditCards[0].id);
-    const card = creditCards.find(function(c) { return c.id === resolvedId; }) || creditCards[0];
+    const card = creditCards.find(c => c.id === cardId) || creditCards[0];
     const d = new Date(txDate + 'T00:00:00');
     if (!card) return new Date(d.getFullYear(), d.getMonth() + 1, 26);
+  
     const closingDay = card.closingDay;
-    const paymentMonth = card.paymentMonth !== undefined ? card.paymentMonth : 1;
+    const paymentMonth = card.paymentMonth ?? 1;
     const paymentDay = card.paymentDay;
+  
     let year = d.getFullYear();
-    let month = d.getMonth();
+    let month = d.getMonth(); // 0-indexed
     if (d.getDate() > closingDay) {
       month += 1;
       if (month > 11) { month = 0; year += 1; }
     }
     month += paymentMonth;
     if (month > 11) { month -= 12; year += 1; }
+  
     return new Date(year, month, paymentDay);
   };
 
@@ -974,22 +976,21 @@ export default function BudgetSimulator() {
   
     // クレジット取引の場合、カード設定に基づいて引き落とし予約を自動作成
     if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
-      const resolvedCardId = newTransaction.cardId || (creditCards[0] && creditCards[0].id);
-      const settlementDate = getSettlementDate(newTransaction.date, resolvedCardId);
-      const card = creditCards.find(function(c) { return c.id === resolvedCardId; });
+      const settlementDate = getSettlementDate(newTransaction.date, newTransaction.cardId);
+      const card = creditCards.find(c => c.id === newTransaction.cardId);
       const settlementTransaction = {
         id: Date.now() + 1,
         date: settlementDate.toISOString().slice(0, 10),
-        category: 'クレジット引き落とし' + (card ? '（' + card.name + '）' : ''),
+        category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
         amount: amount,
         type: 'expense',
         paymentMethod: 'cash',
-        settled: settlementDate <= new Date(),
+        settled: settlementDate <= new Date(), // 引き落とし日が過去ならすぐ確定
         isSettlement: true,
-        parentTransactionId: transaction.id,
-        cardId: resolvedCardId
+        parentTransactionId: transaction.id, // 元取引との紐づけ
+        cardId: newTransaction.cardId
       };
-      setTransactions([Object.assign({}, transaction, {cardId: resolvedCardId}), settlementTransaction, ...transactions]);
+      setTransactions([transaction, settlementTransaction, ...transactions]);
     } else {
       setTransactions([transaction, ...transactions]);
     }
@@ -1020,7 +1021,7 @@ export default function BudgetSimulator() {
       memo: '',
       isSplit: false,
       splitMembers: [],
-      cardId: (creditCards[0] && creditCards[0].id) || null
+      cardId: null
     });
   };
 
@@ -1102,6 +1103,7 @@ export default function BudgetSimulator() {
   };
 
   const deleteTransaction = (id) => {
+    // 元取引に紐づく引き落とし予約も一緒に削除
     setTransactions(transactions.filter(t => t.id !== id && t.parentTransactionId !== id));
     setSplitPayments(prev => prev.filter(s => s.transactionId !== id));
   };
@@ -1120,7 +1122,7 @@ export default function BudgetSimulator() {
           ...t,
           amount: updatedTransaction.amount, // 元取引の金額変更に追従
           date: newSettlementDate.toISOString().slice(0, 10),
-          category: 'クレジット引き落とし' + (card ? '（' + card.name + '）' : ''),
+          category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
           settled: newSettlementDate <= new Date(),
           cardId: updatedTransaction.cardId
         };
@@ -2354,6 +2356,7 @@ export default function BudgetSimulator() {
                 </select>
               </div>
 
+
               <div className="mb-3">
                 <div className="grid grid-cols-7 gap-1 mb-2">
                   {['日', '月', '火', '水', '木', '金', '土'].map((day, i) => (
@@ -3238,18 +3241,6 @@ export default function BudgetSimulator() {
                   className={`w-full py-2.5 rounded-xl text-sm font-semibold border-2 transition-all hover-scale ${darkMode ? 'border-neutral-700 text-neutral-300' : 'border-neutral-200 text-neutral-600'}`}
                 >
                   📤 データをエクスポート
-                </button>
-                <button
-                  onClick={() => {
-                    const parentIds = new Set(transactions.filter(function(t) { return !t.isSettlement; }).map(function(t) { return t.id; }));
-                    const orphans = transactions.filter(function(t) { return t.isSettlement && t.parentTransactionId && !parentIds.has(t.parentTransactionId); });
-                    if (orphans.length === 0) { alert('孤立した引き落とし予約はありませんでした。'); return; }
-                    if (!confirm('孤立した引き落とし予約が' + orphans.length + '件見つかりました。削除しますか？')) return;
-                    setTransactions(function(prev) { return prev.filter(function(t) { return !orphans.find(function(o) { return o.id === t.id; }); }); });
-                  }}
-                  className={"w-full py-2.5 rounded-xl text-sm font-semibold border-2 transition-all hover-scale " + (darkMode ? "border-orange-500/30 text-orange-400" : "border-orange-400/40 text-orange-500")}
-                >
-                  🧹 孤立した引き落とし予約を削除
                 </button>
                 <button
                   onClick={() => {
@@ -4194,26 +4185,26 @@ export default function BudgetSimulator() {
                         splitMembers: []
                       };
                       if (newTransaction.type === 'expense' && newTransaction.paymentMethod === 'credit') {
-                        const cardId2 = newTransaction.cardId || (creditCards[0] && creditCards[0].id);
-                        const card2 = creditCards.find(function(c) { return c.id === cardId2; });
-                        const sd2 = getSettlementDate(selectedDate, cardId2);
-                        const settlementTx2 = {
+                        const cardId = newTransaction.cardId || creditCards[0]?.id;
+                        const card = creditCards.find(c => c.id === cardId);
+                        const settlementDate = getSettlementDate(selectedDate, cardId);
+                        const settlementTx = {
                           id: Date.now() + 1,
-                          date: sd2.toISOString().slice(0, 10),
-                          category: 'クレジット引き落とし' + (card2 ? '（' + card2.name + '）' : ''),
+                          date: settlementDate.toISOString().slice(0, 10),
+                          category: `クレジット引き落とし${card ? `（${card.name}）` : ''}`,
                           amount: amt,
                           type: 'expense',
                           paymentMethod: 'cash',
-                          settled: sd2 <= new Date(),
+                          settled: settlementDate <= new Date(),
                           isSettlement: true,
                           parentTransactionId: t.id,
-                          cardId: cardId2
+                          cardId: cardId
                         };
-                        setTransactions([Object.assign({}, t, {cardId: cardId2}), settlementTx2, ...transactions]);
+                        setTransactions([{ ...t, cardId }, settlementTx, ...transactions]);
                       } else {
                         setTransactions([t, ...transactions]);
                       }
-                      setNewTransaction({ amount: '', category: '', type: 'expense', paymentMethod: 'credit', date: new Date().toISOString().slice(0, 10), memo: '', isSplit: false, splitMembers: [], cardId: (creditCards[0] && creditCards[0].id) || null });
+                      setNewTransaction({ amount: '', category: '', type: 'expense', paymentMethod: 'credit', date: new Date().toISOString().slice(0, 10), memo: '', isSplit: false, splitMembers: [] });
                     }}
                     className="w-full py-2.5 rounded-xl font-semibold text-white transition-all hover-scale"
                     style={{ backgroundColor: theme.accent }}>
